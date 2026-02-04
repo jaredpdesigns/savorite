@@ -459,13 +459,11 @@ class MusicManager: ObservableObject {
         let includedAlbums = albums.filter { !isExcluded($0) }
         guard !includedAlbums.isEmpty else { return nil }
         
-        // Export structure with both fixed and responsive artwork URLs
         struct ExportAlbum: Codable {
             let id: Int?
             let name: String
             let artistName: String
             let artwork: String
-            let artworkResponsive: String
             let genre: String
             let releaseDate: String
             let url: String
@@ -475,27 +473,15 @@ class MusicManager: ObservableObject {
         }
         
         let exportAlbums = includedAlbums.map { album in
-            // Build Apple Music URL from catalog ID
             let appleURL = album.itunesId > 0
-            ? "https://music.apple.com/us/album/\(album.itunesId)"
-            : ""
-            
-            // Fixed 600px artwork URL
-            let artwork600 = album.artworkTemplate
-                .replacingOccurrences(of: "{w}", with: "600")
-                .replacingOccurrences(of: "{h}", with: "600")
-            
-            // Responsive template with single {artworkSize} variable
-            let artworkResponsive = album.artworkTemplate
-                .replacingOccurrences(of: "{w}", with: "{artworkSize}")
-                .replacingOccurrences(of: "{h}", with: "{artworkSize}")
+                ? "https://music.apple.com/us/album/\(album.itunesId)"
+                : ""
             
             return ExportAlbum(
                 id: album.itunesId > 0 ? album.itunesId : nil,
                 name: album.album,
                 artistName: album.artist,
-                artwork: artwork600,
-                artworkResponsive: artworkResponsive,
+                artwork: album.cover,
                 genre: album.genre,
                 releaseDate: album.releaseDate,
                 url: appleURL,
