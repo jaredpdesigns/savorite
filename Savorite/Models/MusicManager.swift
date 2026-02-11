@@ -5,11 +5,35 @@
 //  Created by Jared Pendergraft on 2/3/26.
 //
 
-import Combine
 import Foundation
 import MusicKit
+import Observation
 
-// Response structures for Apple Music API
+/* MARK: - Error Types */
+
+enum MusicManagerError: LocalizedError {
+    case fetchFailed(underlying: Error)
+    case unauthorized
+    case cacheCorrupted
+    case noAlbumsFound
+    
+    var errorDescription: String? {
+        switch self {
+        case .fetchFailed(let error):
+            return "Failed to load your music library: \(error.localizedDescription)"
+        case .unauthorized:
+            return "Please authorize Savorite to access your Apple Music library"
+        case .cacheCorrupted:
+            return "Cached data is corrupted. Please refresh your library."
+        case .noAlbumsFound:
+            return "No albums found in your library"
+        }
+    }
+}
+
+/* MARK: - Response Structures */
+
+/* Response structures for Apple Music API */
 struct LibraryAlbumsResponse: Codable {
     let data: [LibraryAlbum]
     let next: String?
@@ -112,26 +136,27 @@ struct PlayCountCache: Codable {
     let lastUpdated: Date
 }
 
+@Observable
 @MainActor
-class MusicManager: ObservableObject {
-    @Published var authorizationStatus: MusicAuthorization.Status = .notDetermined
-    @Published var isLoading = false
-    @Published var albumsByYear: [Int: [AlbumEntry]] = [:]
-    @Published var errorMessage: String?
-    @Published var totalAlbumsInLibrary = 0
-    @Published var lastUpdated: Date?
+class MusicManager {
+    var authorizationStatus: MusicAuthorization.Status = .notDetermined
+    var isLoading = false
+    var albumsByYear: [Int: [AlbumEntry]] = [:]
+    var errorMessage: String?
+    var totalAlbumsInLibrary = 0
+    var lastUpdated: Date?
     
-    // Loading progress tracking
-    @Published var loadingCurrentCount = 0
-    @Published var loadingTotalCount = 0
+    /* Loading progress tracking */
+    var loadingCurrentCount = 0
+    var loadingTotalCount = 0
     
-    // Track excluded albums by library ID (persists across sessions)
-    @Published var excludedLibraryIds: Set<String> = []
+    /* Track excluded albums by library ID (persists across sessions) */
+    var excludedLibraryIds: Set<String> = []
     
-    // Play count tracking
-    @Published var playCountsByLibraryId: [String: Int] = [:]
-    @Published var isLoadingPlayCounts = false
-    @Published var playCountLastUpdated: Date?
+    /* Play count tracking */
+    var playCountsByLibraryId: [String: Int] = [:]
+    var isLoadingPlayCounts = false
+    var playCountLastUpdated: Date?
     
     // Only favorites are stored/displayed
     var sortedYears: [Int] {
@@ -196,7 +221,7 @@ class MusicManager: ObservableObject {
             let newData = try JSONEncoder().encode(newCache)
             try newData.write(to: cacheURL)
         } catch {
-            print("Failed to save exclusions: \(error)")
+            // Silently fail - exclusions can be re-saved later
         }
     }
     
@@ -209,10 +234,8 @@ class MusicManager: ObservableObject {
         authorizationStatus = MusicAuthorization.currentStatus
     }
     
-    // Load from cache if available
     func loadFromCache() -> Bool {
         guard FileManager.default.fileExists(atPath: cacheURL.path) else {
-            print("No cache file found")
             return false
         }
         
@@ -224,15 +247,13 @@ class MusicManager: ObservableObject {
             totalAlbumsInLibrary = cache.totalAlbums
             lastUpdated = cache.lastUpdated
             
-            // Restore excluded albums
+            /* Restore excluded albums */
             if let excluded = cache.excludedLibraryIds {
                 excludedLibraryIds = Set(excluded)
             }
             
-            print("Loaded \(cache.totalAlbums) albums from cache (updated: \(cache.lastUpdated))")
             return true
         } catch {
-            print("Failed to load cache: \(error)")
             return false
         }
     }
@@ -242,7 +263,6 @@ class MusicManager: ObservableObject {
      */
     func loadPlayCountCache() -> Bool {
         guard FileManager.default.fileExists(atPath: playCountCacheURL.path) else {
-            print("No play count cache file found")
             return false
         }
         
@@ -251,15 +271,13 @@ class MusicManager: ObservableObject {
             let cache = try JSONDecoder().decode(PlayCountCache.self, from: data)
             playCountsByLibraryId = cache.playCountsByLibraryId
             playCountLastUpdated = cache.lastUpdated
-            print("Loaded \(cache.playCountsByLibraryId.count) play counts from cache (updated: \(cache.lastUpdated))")
             return true
         } catch {
-            print("Failed to load play count cache: \(error)")
             return false
         }
     }
     
-    // Save to cache (preserves existing albums unless new ones provided)
+    /* Save to cache (preserves existing albums unless new ones provided) */
     private func saveToCache() {
         let cache = AlbumCache(
             albums: albumsByYear,
@@ -272,9 +290,8 @@ class MusicManager: ObservableObject {
             let data = try JSONEncoder().encode(cache)
             try data.write(to: cacheURL)
             lastUpdated = cache.lastUpdated
-            print("Saved \(totalAlbumsInLibrary) albums to cache")
         } catch {
-            print("Failed to save cache: \(error)")
+            // Silently fail - cache will be regenerated on next launch
         }
     }
     
@@ -291,9 +308,8 @@ class MusicManager: ObservableObject {
             let data = try JSONEncoder().encode(cache)
             try data.write(to: playCountCacheURL)
             playCountLastUpdated = cache.lastUpdated
-            print("Saved \(playCountsByLibraryId.count) play counts to cache")
         } catch {
-            print("Failed to save play count cache: \(error)")
+            // Silently fail - cache will be regenerated on next refresh
         }
     }
     
@@ -316,11 +332,10 @@ class MusicManager: ObservableObject {
             albumsByYear = [:]
         }
         
-        let startTime = Date()
         var allAlbums: [LibraryAlbum] = []
         var nextURL: String? = "https://api.music.apple.com/v1/me/library/albums?limit=100&include=catalog,tracks.catalog&extend=inFavorites"
         
-        // Fetch all pages
+        /* Fetch all pages */
         loadingCurrentCount = 0
         loadingTotalCount = 0
         var totalSet = false
@@ -359,16 +374,10 @@ class MusicManager: ObservableObject {
                 }
             }
             
-            print("Fetched \(allAlbums.count) albums from cloud library")
-            
-            // Process albums - extract catalog IDs from track data
-            // Processing albums...
+            /* Process albums - extract catalog IDs from track data */
             var grouped: [Int: [AlbumEntry]] = [:]
-            var processedCount = 0
-            var withCatalogId = 0
             
             for album in allAlbums {
-                processedCount += 1
                 
                 let attrs = album.attributes
                 
@@ -390,7 +399,6 @@ class MusicManager: ObservableObject {
                     if let albumId = Int(catalogAlbum.id) {
                         catalogAlbumId = albumId
                         albumLink = "https://music.apple.com/us/album/\(albumId)"
-                        withCatalogId += 1
                     } else if let albumURL = catalogAlbum.attributes?.url,
                               let urlObj = URL(string: albumURL) {
                         let pathComponents = urlObj.pathComponents
@@ -398,7 +406,6 @@ class MusicManager: ObservableObject {
                            let albumId = Int(lastComponent) {
                             catalogAlbumId = albumId
                             albumLink = "https://music.apple.com/us/album/\(albumId)"
-                            withCatalogId += 1
                         }
                     }
                 }
@@ -421,7 +428,6 @@ class MusicManager: ObservableObject {
                             if let albumId = Int(potentialAlbumId) {
                                 catalogAlbumId = albumId
                                 albumLink = "https://music.apple.com/us/album/\(albumId)"
-                                withCatalogId += 1
                             }
                         }
                     }
@@ -466,8 +472,6 @@ class MusicManager: ObservableObject {
                     )
                 }
                 
-                withCatalogId += 1  // Count favorites
-                
                 grouped[year, default: []].append(entry)
             }
             
@@ -479,16 +483,11 @@ class MusicManager: ObservableObject {
             albumsByYear = grouped
             totalAlbumsInLibrary = totalFavorites
             
-            let elapsed = Date().timeIntervalSince(startTime)
-            print("Processed \(processedCount) albums in \(String(format: "%.1f", elapsed))s")
-            print("\(withCatalogId) albums are favorites")
-            
-            // Save to cache
+            /* Save to cache */
             saveToCache()
             
         } catch {
-            errorMessage = "Failed to fetch: \(error.localizedDescription)"
-            print("Error: \(error)")
+            errorMessage = MusicManagerError.fetchFailed(underlying: error).errorDescription
         }
         
         isLoading = false
@@ -513,46 +512,34 @@ class MusicManager: ObservableObject {
         }
         
         guard !albumKeyToLibraryId.isEmpty else {
-            print("No albums to enrich with play counts")
             isLoadingPlayCounts = false
             return
         }
         
-        print("Enriching \(albumKeyToLibraryId.count) albums with play counts...")
-        
         do {
-            // Fetch all albums using MusicLibraryRequest
+            /* Fetch all albums using MusicLibraryRequest */
             let request = MusicLibraryRequest<Album>()
             let response = try await request.response()
             
             let albums = response.items
             
             guard !albums.isEmpty else {
-                print("No albums returned from MusicLibraryRequest")
                 isLoadingPlayCounts = false
                 return
             }
             
-            print("Fetched \(albums.count) albums from MusicLibraryRequest")
-            
-            // Calculate play counts for each album
-            var newPlayCounts: [String: Int] = playCountsByLibraryId // Start with cached values
-            var matchedCount = 0
-            var updatedCount = 0
-            var skippedCount = 0
+            /* Calculate play counts for each album */
+            var newPlayCounts: [String: Int] = playCountsByLibraryId
             
             for album in albums {
-                // Create matching key from this album
                 let key = "\(album.artistName.lowercased())|\(album.title.lowercased())"
                 
-                // Look up the library ID from our map
+                /* Look up the library ID from our map */
                 guard let libraryId = albumKeyToLibraryId[key] else {
                     continue
                 }
                 
-                matchedCount += 1
-                
-                // Fetch tracks for this album
+                /* Fetch tracks for this album */
                 do {
                     let detailedAlbum = try await album.with([.tracks])
                     guard let tracks = detailedAlbum.tracks else {
@@ -569,108 +556,69 @@ class MusicManager: ObservableObject {
                     
                     guard !trackPlayCounts.isEmpty else { continue }
                     
-                    // Calculate median play count for the album
-                    let sortedCounts = trackPlayCounts.sorted()
-                    let medianPlayCount: Int
+                    /* Calculate play count using 75th percentile of played tracks
+                     This better represents actual album listens than median,
+                     accounting for skipped tracks (intros, interludes) while
+                     avoiding inflation from a few heavily replayed songs */
+                    let playedTracks = trackPlayCounts.filter { $0 > 0 }.sorted()
+                    let albumPlayCount: Int
                     
-                    if sortedCounts.count % 2 == 0 {
-                        // Even number of tracks: average of middle two
-                        let mid1 = sortedCounts[sortedCounts.count / 2 - 1]
-                        let mid2 = sortedCounts[sortedCounts.count / 2]
-                        medianPlayCount = (mid1 + mid2) / 2
+                    if playedTracks.isEmpty {
+                        /* No tracks have been played */
+                        albumPlayCount = 0
+                    } else if playedTracks.count == 1 {
+                        /* Only one track played */
+                        albumPlayCount = playedTracks[0]
                     } else {
-                        // Odd number of tracks: middle value
-                        medianPlayCount = sortedCounts[sortedCounts.count / 2]
+                        /* Use 75th percentile of played tracks */
+                        let percentileIndex = Int(Double(playedTracks.count - 1) * 0.75)
+                        albumPlayCount = playedTracks[percentileIndex]
                     }
                     
-                    // Apply threshold: at least 50% of tracks must have been played
+                    /* Apply threshold: at least 50% of tracks must have been played */
                     let nonZeroTracks = trackPlayCounts.filter { $0 > 0 }.count
                     let percentagePlayed = Double(nonZeroTracks) / Double(trackPlayCounts.count)
                     
-                    // Check if this differs from cached value
+                    /* Check if this differs from cached value */
                     let cachedCount = playCountsByLibraryId[libraryId]
                     
-                    // Only update if median > 0, threshold met, and value changed
-                    if medianPlayCount > 0 && percentagePlayed >= 0.5 {
-                        if cachedCount != medianPlayCount {
-                            newPlayCounts[libraryId] = medianPlayCount
-                            updatedCount += 1
-                        } else {
-                            skippedCount += 1
+                    /* Only update if play count > 0, threshold met, and value changed */
+                    if albumPlayCount > 0 && percentagePlayed >= 0.5 {
+                        if cachedCount != albumPlayCount {
+                            newPlayCounts[libraryId] = albumPlayCount
                         }
-                    } else if medianPlayCount == 0 && cachedCount != nil {
-                        // Remove from cache if it no longer meets threshold
+                    } else if albumPlayCount == 0 && cachedCount != nil {
+                        /* Remove from cache if it no longer meets threshold */
                         newPlayCounts.removeValue(forKey: libraryId)
-                        updatedCount += 1
-                    }
-                    
-                    if matchedCount % 50 == 0 {
-                        print("Processed \(matchedCount) albums (\(updatedCount) updated, \(skippedCount) unchanged)...")
                     }
                 } catch {
-                    print("Failed to fetch tracks for album '\(album.title)': \(error)")
+                    /* Skip this album if tracks can't be fetched */
                 }
             }
             
             playCountsByLibraryId = newPlayCounts
             savePlayCountCache()
-            print("Successfully enriched \(newPlayCounts.count) albums with play counts")
-            print("Updated: \(updatedCount), Unchanged: \(skippedCount)")
-            if !newPlayCounts.isEmpty {
-                print("Sample play counts: \(Array(newPlayCounts.prefix(3)))")
-            }
             
         } catch {
-            print("Failed to enrich with play counts: \(error)")
+            // Silently fail - play counts will be missing but app continues
         }
         
         isLoadingPlayCounts = false
     }
     
-    // Refresh library - incremental update (preserves cache, adds new favorites)
+    /* Refresh library - incremental update (preserves cache, adds new favorites and updates play counts) */
     func refreshLibrary() async {
-        // Check if library was recently refreshed (within last hour)
-        if let lastUpdated = lastUpdated {
-            let timeSinceLastUpdate = Date().timeIntervalSince(lastUpdated)
-            let oneHourInSeconds: TimeInterval = 3600
-            
-            if timeSinceLastUpdate < oneHourInSeconds {
-                print("Skipping library refresh (last updated \(Int(timeSinceLastUpdate / 60)) minutes ago)")
-                print("Refreshing play counts only...")
-                
-                // Only refresh play counts
-                await enrichWithPlayCounts()
-                return
-            }
-        }
-        
-        // Preserve user exclusions
+        /* Preserve user exclusions */
         let savedExclusions = excludedLibraryIds
         
-        // Use incremental mode to only add new albums (keeps existing cache)
+        /* Use incremental mode to only add new albums (keeps existing cache) */
         await fetchFavoriteAlbums(incremental: true)
         
-        // Restore exclusions
+        /* Restore exclusions */
         excludedLibraryIds = savedExclusions
         saveExclusionsToCache()
         
-        // Trigger play count refresh
-        await enrichWithPlayCounts()
-    }
-    
-    // Force refresh - always checks for new favorites regardless of last update time
-    func forceRefreshLibrary() async {
-        // Preserve user exclusions
-        let savedExclusions = excludedLibraryIds
-        
-        // Use incremental mode to only add new albums (keeps existing cache)
-        await fetchFavoriteAlbums(incremental: true)
-        
-        // Restore exclusions
-        excludedLibraryIds = savedExclusions
-        saveExclusionsToCache()
-        
-        // Trigger play count refresh
+        /* Trigger play count refresh */
         await enrichWithPlayCounts()
     }
     
@@ -699,11 +647,6 @@ class MusicManager: ObservableObject {
             : ""
             
             let playCount = playCountsByLibraryId[album.libraryId]
-            
-            // Debug: Log if we're missing play count for an album
-            if playCount == nil && !album.libraryId.isEmpty {
-                print("⚠️ No play count for '\(album.album)' by \(album.artist) (libraryId: \(album.libraryId))")
-            }
             
             return ExportAlbum(
                 id: album.itunesId > 0 ? album.itunesId : nil,
@@ -738,80 +681,5 @@ class MusicManager: ObservableObject {
             errorMessage = "Failed to encode JSON: \(error.localizedDescription)"
             return nil
         }
-    }
-    
-    // Debug: Inspect a specific album's full API response
-    func inspectAlbum(_ album: AlbumEntry) async {
-        print("\n=== INSPECTING ALBUM: \(album.album) by \(album.artist) ===")
-        print("iTunes ID: \(album.itunesId)")
-        print("Library ID: \(album.libraryId)")
-        print("isFavorite (cached): \(album.isFavorite)")
-        
-        // If we have a library ID, fetch it directly with inFavorites extension
-        if !album.libraryId.isEmpty {
-            let libraryURL = URL(string: "https://api.music.apple.com/v1/me/library/albums/\(album.libraryId)?extend=inFavorites")!
-            print("Fetching library album: \(libraryURL.absoluteString)")
-            
-            do {
-                let request = MusicDataRequest(urlRequest: URLRequest(url: libraryURL))
-                let response = try await request.response()
-                let json = String(data: response.data, encoding: .utf8) ?? "Could not decode"
-                print("\n--- Library Album Response ---")
-                print(json)
-                print("------------------------------\n")
-            } catch {
-                print("Library fetch error: \(error)")
-            }
-        }
-        
-        // If we have a catalog ID, fetch it too
-        if album.itunesId > 0 {
-            let catalogURL = URL(string: "https://api.music.apple.com/v1/catalog/us/albums/\(album.itunesId)?extend=inFavorites")!
-            print("Fetching catalog album: \(catalogURL.absoluteString)")
-            
-            do {
-                let request = MusicDataRequest(urlRequest: URLRequest(url: catalogURL))
-                let response = try await request.response()
-                let json = String(data: response.data, encoding: .utf8) ?? "Could not decode"
-                print("\n--- Catalog Album Response ---")
-                print(json)
-                print("------------------------------\n")
-            } catch {
-                print("Catalog fetch error: \(error)")
-            }
-        }
-        
-        print("=== END INSPECTION ===\n")
-    }
-    
-    // Debug: search for a specific album by name to test
-    func debugSearchAlbum(name: String) async {
-        print("\n=== DEBUG SEARCH: \(name) ===")
-        
-        // Search library albums
-        let searchURL = URL(string: "https://api.music.apple.com/v1/me/library/albums?limit=100&extend=inFavorites")!
-        
-        do {
-            let request = MusicDataRequest(urlRequest: URLRequest(url: searchURL))
-            let response = try await request.response()
-            
-            // Search through the JSON for the album name
-            let json = String(data: response.data, encoding: .utf8) ?? ""
-            if json.contains(name) {
-                print("Found '\(name)' in first 100 albums!")
-                // Print a snippet around it
-                if let range = json.range(of: name) {
-                    let start = json.index(range.lowerBound, offsetBy: -200, limitedBy: json.startIndex) ?? json.startIndex
-                    let end = json.index(range.upperBound, offsetBy: 500, limitedBy: json.endIndex) ?? json.endIndex
-                    print(json[start..<end])
-                }
-            } else {
-                print("'\(name)' NOT found in first 100 albums")
-            }
-        } catch {
-            print("Search error: \(error)")
-        }
-        
-        print("=== END DEBUG SEARCH ===\n")
     }
 }

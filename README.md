@@ -7,13 +7,18 @@ A macOS app to save and export your favorite albums from Apple Music, with play 
 - **Access Your Favorites**: Connects to your Apple Music library and displays albums you've marked as favorites
 - **Organized by Year**: Albums are grouped by release year for easy browsing
 - **Top Albums**: View your most-listened albums per year, filtered by play count (5+ listens)
-- **Play Count Tracking**: Automatically calculates album play counts using median track plays
-- **Smart Refresh**:
-  - Quick refresh for play counts only
-  - Full refresh to check for new favorites
-- **Search**: Filter albums by title or artist name
+  - Visual play count badges show listen counts at a glance
+- **Smart Play Count Tracking**: Calculates album play counts
+  - Accounts for skipped tracks (intros, interludes) without inflating counts
+  - Requires 50% of tracks played to qualify as an album listen
+- **Interactive Album Management**:
+  - Click albums to exclude/include from exports
+  - Shift-click for range selection
+  - Right-click for context menu with quick actions
+  - Open albums directly in Apple Music
+- **Search**: Filter albums by title or artist name across all years
 - **Export Options**:
-  - Copy as JSON to clipboard (includes play counts)
+  - Copy as JSON to clipboard
   - Copy as plain text list
   - Copy as Markdown list
   - Download as JSON file
@@ -23,11 +28,18 @@ A macOS app to save and export your favorite albums from Apple Music, with play 
 ### Viewing Your Music
 
 - **All Albums**: Browse all favorite albums from a year
-- **Top Albums**: See your most-listened albums (5+ plays) to create year-end lists
+- **Top Albums**: See your most-listened albums (5+ plays) with visual play count badges
 - Years with fewer than 10 favorites are hidden (except current year)
+- Quick search across all albums and artists
+
+### Managing Your Collection
+
+- **Exclude Albums**: Click any album to exclude it from exports
+- **Range Selection**: Shift-click to select multiple albums at once to exclude
+- **Open in Apple Music**: Right-click any album and select "Open in Apple Music"
 
 ### Refreshing Data
 
-- **Refresh Play Counts**: Fast update of listening statistics
-- **Check for New Favorites**: Full library scan for newly favorited albums
+- **Refresh**: Updates your library with new favorites and refreshes all play counts
 - Data is cached locally for quick app startup
+- Play counts are calculated from actual listening data, not simple averages

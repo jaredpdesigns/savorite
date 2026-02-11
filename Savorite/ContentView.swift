@@ -9,7 +9,7 @@ import MusicKit
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var musicManager = MusicManager()
+    @State private var musicManager = MusicManager()
     @State private var selectedYear: Int?
     @State private var searchText: String = ""
     @State private var hasCheckedAuthorization: Bool = false
@@ -93,26 +93,13 @@ struct ContentView: View {
             hasCheckedAuthorization = true
             
             if musicManager.authorizationStatus == .authorized {
-                // Try loading from cache first
-                if musicManager.loadFromCache() {
-                    // Load play count cache (don't refresh automatically)
-                    _ = musicManager.loadPlayCountCache()
-                } else {
-                    // No cache, fetch from cloud
-                    await musicManager.fetchFavoriteAlbums()
-                }
+                await loadMusicData()
             }
         }
         .onChange(of: musicManager.authorizationStatus) { oldValue, newValue in
             if newValue == .authorized {
                 Task {
-                    // Try loading from cache first
-                    if musicManager.loadFromCache() {
-                        // Load play count cache (don't refresh automatically)
-                        _ = musicManager.loadPlayCountCache()
-                    } else {
-                        await musicManager.fetchFavoriteAlbums()
-                    }
+                    await loadMusicData()
                 }
             }
         }
@@ -199,29 +186,30 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Shared Toolbar Button
+    /* MARK: - Shared Toolbar Button */
     
     private var refreshButton: some View {
-        Menu {
-            Button {
-                Task {
-                    await musicManager.refreshLibrary()
-                }
-            } label: {
-                Label("Refresh Top Albums", systemImage: "heart.fill")
-            }
-            
-            Button {
-                Task {
-                    await musicManager.forceRefreshLibrary()
-                }
-            } label: {
-                Label("Refresh Favorites", systemImage: "star.fill")
+        Button {
+            Task {
+                await musicManager.refreshLibrary()
             }
         } label: {
             Label("Refresh", systemImage: "arrow.clockwise")
         }
-        .help("Refresh library and play counts")
+        .help("Refresh favorites and play counts")
+    }
+    
+    /* MARK: - Helper Methods */
+    
+    private func loadMusicData() async {
+        /* Try loading from cache first */
+        if musicManager.loadFromCache() {
+            /* Load play count cache (don't refresh automatically) */
+            _ = musicManager.loadPlayCountCache()
+        } else {
+            /* No cache, fetch from cloud */
+            await musicManager.fetchFavoriteAlbums()
+        }
     }
 }
 

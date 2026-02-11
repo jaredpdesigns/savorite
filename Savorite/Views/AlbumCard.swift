@@ -11,23 +11,37 @@ import SwiftUI
 struct AlbumCard: View {
     let album: AlbumEntry
     let isExcluded: Bool
-    let onToggle: (Bool) -> Void  // Bool indicates if shift key was held
-
+    let playCount: Int?  /* Optional play count passed from parent */
+    let showPlayCountBadge: Bool  /* Whether to show the play count badge */
+    let onToggle: (Bool) -> Void  /* Bool indicates if shift key was held */
+    
+    private var playCountText: String {
+        guard let count = playCount else { return "" }
+        return "\(count) \(count == 1 ? "play" : "plays")"
+    }
+    
     private var accessibilityLabelText: String {
         var label = "\(album.album) by \(album.artist)"
+        
+        /* Include play count if available */
+        if let count = playCount, count > 0 {
+            label += ", played \(count) \(count == 1 ? "time" : "times")"
+        }
+        
         if isExcluded {
             label += ", hidden from export"
         }
+        
         return label
     }
-
+    
     private var accessibilityHintText: String {
         isExcluded ? "Double-tap to include in export" : "Double-tap to exclude from export"
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack {
+            ZStack() {
                 AsyncImage(url: URL(string: album.cover)) { phase in
                     switch phase {
                     case .empty:
@@ -55,9 +69,23 @@ struct AlbumCard: View {
                     }
                 }
                 .opacity(isExcluded ? 0.25 : 1.0)
+                .overlay(alignment: .topLeading) {
+                    /* Play count badge in top-left corner with glass effect */
+                    if showPlayCountBadge, let count = playCount, count > 0 {
+                        Text(playCountText)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .padding(8)
+                            .accessibilityHidden(true)
+                    }
+                }
                 
+                /* Excluded icon centered */
                 if isExcluded {
-                    Image(systemName: "eye.slash.fill")
+                    Image(systemName: "star.slash.fill")
                         .font(.title)
                         .foregroundStyle(.white)
                         .accessibilityHidden(true)
@@ -84,8 +112,22 @@ struct AlbumCard: View {
             onToggle(isShiftHeld)
         }
         .contextMenu {
-            Button(isExcluded ? "Include in Export" : "Exclude from Export") {
+            Button {
                 onToggle(false)
+            } label: {
+                Label(
+                    isExcluded ? "Include in Export" : "Exclude from Export",
+                    systemImage: "star.slash.fill"
+                ).font(.body)
+            }
+            
+            if let url = URL(string: album.link), !album.link.isEmpty {
+                Divider()
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Label("Open in Apple Music", systemImage: "music.pages.fill").font(.body)
+                }
             }
         }
     }
@@ -104,7 +146,9 @@ struct AlbumCard: View {
             isFavorite: true,
             releaseDate: "2025-01-17"
         ),
-        isExcluded: false
+        isExcluded: false,
+        playCount: 12,
+        showPlayCountBadge: true
     ) { _ in }
         .frame(width: 220)
         .padding()
@@ -123,7 +167,9 @@ struct AlbumCard: View {
             isFavorite: true,
             releaseDate: "2025-01-17"
         ),
-        isExcluded: true
+        isExcluded: true,
+        playCount: nil,
+        showPlayCountBadge: false
     ) { _ in }
         .frame(width: 220)
         .padding()

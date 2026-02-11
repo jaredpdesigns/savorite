@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 struct YearDetailView: View {
     let year: Int
     let albums: [AlbumEntry]
-    @ObservedObject var musicManager: MusicManager
+    let musicManager: MusicManager
     let searchText: String
     
     @State private var showingExportSuccess = false
@@ -108,7 +108,9 @@ struct YearDetailView: View {
                         ForEach(Array(displayedAlbums.enumerated()), id: \.element.id) { index, album in
                             AlbumCard(
                                 album: album,
-                                isExcluded: musicManager.isExcluded(album)
+                                isExcluded: musicManager.isExcluded(album),
+                                playCount: musicManager.playCountsByLibraryId[album.libraryId],
+                                showPlayCountBadge: selectedView == .top && searchText.isEmpty
                             ) { isShiftClick in
                                 handleAlbumClick(index: index, album: album, isShiftClick: isShiftClick)
                             }
@@ -144,19 +146,19 @@ struct YearDetailView: View {
                     Button {
                         copyAsJSON()
                     } label: {
-                        Label("Copy as JSON", systemImage: "document.on.document.fill")
+                        Label("Copy as JSON", systemImage: "document.on.document.fill").font(.body)
                     }
                     
                     Button {
                         copyAsPlainText()
                     } label: {
-                        Label("Copy as Plain Text", systemImage: "text.page.fill")
+                        Label("Copy as Plain Text", systemImage: "text.page.fill").font(.body)
                     }
                     
                     Button {
                         copyAsMarkdown()
                     } label: {
-                        Label("Copy as Markdown List", systemImage: "list.star")
+                        Label("Copy as Markdown List", systemImage: "list.star").font(.body)
                     }
                     
                     Divider()
@@ -164,7 +166,7 @@ struct YearDetailView: View {
                     Button {
                         downloadJSON()
                     } label: {
-                        Label("Download JSON", systemImage: "text.document.fill")
+                        Label("Download JSON", systemImage: "text.document.fill").font(.body)
                     }
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
@@ -259,7 +261,7 @@ struct YearDetailView: View {
                 exportedCount = includedCount
                 showingExportSuccess = true
             } catch {
-                print("Failed to save file: \(error)")
+                // Silently fail - user will see file wasn't created
             }
         }
     }

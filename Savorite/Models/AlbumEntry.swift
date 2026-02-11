@@ -7,7 +7,7 @@
 
 import Foundation
 
-// Model representing an album entry for caching and export.
+/* Model representing an album entry for caching and export. */
 struct AlbumEntry: Codable, Identifiable {
     let album: String
     let artist: String
@@ -15,28 +15,30 @@ struct AlbumEntry: Codable, Identifiable {
     let genre: String
     let itunesId: Int
     
-    // Artwork template URL with {w}x{h} placeholders
+    /* Artwork template URL with {w}x{h} placeholders */
     let artworkTemplate: String
     
-    // Library ID for querying Apple Music API
+    /* Library ID for querying Apple Music API */
     let libraryId: String
     
-    // Whether the album is favorited (starred) in Apple Music
+    /* Whether the album is favorited (starred) in Apple Music */
     let isFavorite: Bool
     
-    // Full release date string from API (e.g., "2025-10-03")
+    /* Full release date string from API (e.g., "2025-10-03") */
     let releaseDate: String
     
-    // Additional useful fields
+    /* Additional useful fields */
     let trackCount: Int
     let dateAdded: String
     let contentRating: String
     
-    // Play count (enriched separately from main cache)
+    /* Play count (enriched separately from main cache) */
     let playCount: Int?
     
-    // Use UUID for SwiftUI list identity
-    let id: UUID
+    /* Use stable libraryId for SwiftUI list identity */
+    var id: String {
+        libraryId
+    }
     
     // Computed property for display (600px version)
     var cover: String {
@@ -73,7 +75,6 @@ struct AlbumEntry: Codable, Identifiable {
         self.dateAdded = dateAdded
         self.contentRating = contentRating
         self.playCount = playCount
-        self.id = UUID()
     }
     
     enum CodingKeys: String, CodingKey {
@@ -90,8 +91,6 @@ struct AlbumEntry: Codable, Identifiable {
         case dateAdded
         case contentRating
         case playCount
-        // Legacy support
-        case cover
     }
     
     init(from decoder: Decoder) throws {
@@ -101,18 +100,7 @@ struct AlbumEntry: Codable, Identifiable {
         link = try container.decode(String.self, forKey: .link)
         genre = try container.decode(String.self, forKey: .genre)
         itunesId = try container.decode(Int.self, forKey: .itunesId)
-        
-        // Try new artwork field first, fall back to legacy cover
-        if let template = try container.decodeIfPresent(String.self, forKey: .artworkTemplate) {
-            artworkTemplate = template
-        } else if let legacyCover = try container.decodeIfPresent(String.self, forKey: .cover) {
-            // Convert legacy 600px URL back to template
-            artworkTemplate = legacyCover
-                .replacingOccurrences(of: "600x600", with: "{w}x{h}")
-        } else {
-            artworkTemplate = ""
-        }
-        
+        artworkTemplate = try container.decodeIfPresent(String.self, forKey: .artworkTemplate) ?? ""
         libraryId = try container.decodeIfPresent(String.self, forKey: .libraryId) ?? ""
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         releaseDate = try container.decodeIfPresent(String.self, forKey: .releaseDate) ?? ""
@@ -120,7 +108,6 @@ struct AlbumEntry: Codable, Identifiable {
         dateAdded = try container.decodeIfPresent(String.self, forKey: .dateAdded) ?? ""
         contentRating = try container.decodeIfPresent(String.self, forKey: .contentRating) ?? ""
         playCount = try container.decodeIfPresent(Int.self, forKey: .playCount)
-        id = UUID()
     }
     
     func encode(to encoder: Encoder) throws {
