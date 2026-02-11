@@ -41,11 +41,25 @@ struct ContentView: View {
     
     // Filter years based on search text
     private var filteredYears: [Int] {
-        if searchText.isEmpty {
-            return musicManager.sortedYears
+        let currentYear = Calendar.current.component(.year, from: Date())
+        
+        let yearsWithEnoughAlbums = musicManager.sortedYears.filter { year in
+            // Always show current year regardless of count
+            if year == currentYear {
+                return true
+            }
+            
+            // Only show other years with 10+ favorite albums
+            guard let albums = musicManager.albumsByYear[year] else { return false }
+            return albums.count >= 10
         }
+        
+        if searchText.isEmpty {
+            return yearsWithEnoughAlbums
+        }
+        
         let lowercasedSearch = searchText.lowercased()
-        return musicManager.sortedYears.filter { year in
+        return yearsWithEnoughAlbums.filter { year in
             guard let albums = musicManager.albumsByYear[year] else { return false }
             return albums.contains { album in
                 album.album.lowercased().contains(lowercasedSearch) ||
@@ -80,7 +94,10 @@ struct ContentView: View {
             
             if musicManager.authorizationStatus == .authorized {
                 // Try loading from cache first
-                if !musicManager.loadFromCache() {
+                if musicManager.loadFromCache() {
+                    // Load play count cache (don't refresh automatically)
+                    _ = musicManager.loadPlayCountCache()
+                } else {
                     // No cache, fetch from cloud
                     await musicManager.fetchFavoriteAlbums()
                 }
@@ -90,7 +107,10 @@ struct ContentView: View {
             if newValue == .authorized {
                 Task {
                     // Try loading from cache first
-                    if !musicManager.loadFromCache() {
+                    if musicManager.loadFromCache() {
+                        // Load play count cache (don't refresh automatically)
+                        _ = musicManager.loadPlayCountCache()
+                    } else {
                         await musicManager.fetchFavoriteAlbums()
                     }
                 }
@@ -182,14 +202,26 @@ struct ContentView: View {
     // MARK: - Shared Toolbar Button
     
     private var refreshButton: some View {
-        Button {
-            Task {
-                await musicManager.refreshLibrary()
+        Menu {
+            Button {
+                Task {
+                    await musicManager.refreshLibrary()
+                }
+            } label: {
+                Label("Refresh Top Albums", systemImage: "heart.fill")
+            }
+            
+            Button {
+                Task {
+                    await musicManager.forceRefreshLibrary()
+                }
+            } label: {
+                Label("Refresh Favorites", systemImage: "star.fill")
             }
         } label: {
-            Label("Refresh Library", systemImage: "arrow.clockwise")
+            Label("Refresh", systemImage: "arrow.clockwise")
         }
-        .help("Refresh from Apple Music")
+        .help("Refresh library and play counts")
     }
 }
 

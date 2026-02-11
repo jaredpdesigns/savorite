@@ -14,17 +14,26 @@ struct YearDetailView: View {
     let albums: [AlbumEntry]
     @ObservedObject var musicManager: MusicManager
     let searchText: String
-
+    
     @State private var showingExportSuccess = false
     @State private var showingCopySuccess = false
     @State private var exportedCount = 0
     @State private var copyFormat = ""
     @State private var lastClickedIndex: Int?
-
+    @State private var selectedView: AlbumView = .all
+    
+    enum AlbumView: String, CaseIterable {
+        case all = "All Albums"
+        case top = "Top Albums"
+    }
+    
     private let columns = [
         GridItem(.adaptive(minimum: 220, maximum: 280), spacing: 20, alignment: .top)
     ]
-
+    
+    // Minimum play count threshold for "Top Albums"
+    private let topAlbumsThreshold = 5
+    
     // Filter albums based on search text
     private var filteredAlbums: [AlbumEntry] {
         if searchText.isEmpty {
@@ -36,35 +45,79 @@ struct YearDetailView: View {
             album.artist.lowercased().contains(lowercasedSearch)
         }
     }
-
-    private var includedAlbums: [AlbumEntry] {
-        filteredAlbums.filter { !musicManager.isExcluded($0) }
+    
+    // Filter for top albums (play count >= threshold)
+    private var topAlbums: [AlbumEntry] {
+        albums.filter { album in
+            if let playCount = musicManager.playCountsByLibraryId[album.libraryId] {
+                return playCount >= topAlbumsThreshold
+            }
+            return false
+        }
     }
-
+    
+    // Determine which albums to display based on current view and search state
+    private var displayedAlbums: [AlbumEntry] {
+        // When searching, always show all matching albums
+        if !searchText.isEmpty {
+            return filteredAlbums
+        }
+        
+        // Otherwise, respect the selected view
+        switch selectedView {
+        case .all:
+            return albums
+        case .top:
+            return topAlbums
+        }
+    }
+    
+    private var includedAlbums: [AlbumEntry] {
+        displayedAlbums.filter { !musicManager.isExcluded($0) }
+    }
+    
     private var includedCount: Int {
         includedAlbums.count
     }
-
+    
     private var excludedCount: Int {
-        filteredAlbums.filter { musicManager.isExcluded($0) }.count
+        displayedAlbums.filter { musicManager.isExcluded($0) }.count
     }
-
+    
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
-                    ForEach(Array(filteredAlbums.enumerated()), id: \.element.id) { index, album in
-                        AlbumCard(
-                            album: album,
-                            isExcluded: musicManager.isExcluded(album)
-                        ) { isShiftClick in
-                            handleAlbumClick(index: index, album: album, isShiftClick: isShiftClick)
-                        }
+            // Segmented control (hidden when searching)
+            if searchText.isEmpty {
+                Picker("", selection: $selectedView) {
+                    ForEach(AlbumView.allCases, id: \.self) { view in
+                        Text(view.rawValue).tag(view)
                     }
                 }
-                .padding()
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
             }
-
+            
+            // Show empty state if Top Albums view has no albums
+            if selectedView == .top && topAlbums.isEmpty && searchText.isEmpty {
+                topAlbumsEmptyState
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
+                        ForEach(Array(displayedAlbums.enumerated()), id: \.element.id) { index, album in
+                            AlbumCard(
+                                album: album,
+                                isExcluded: musicManager.isExcluded(album)
+                            ) { isShiftClick in
+                                handleAlbumClick(index: index, album: album, isShiftClick: isShiftClick)
+                            }
+                        }
+                    }
+                    .padding()
+                }
+            }
+            
             // Footer with counts
             HStack {
                 if excludedCount > 0 {
@@ -80,8 +133,8 @@ struct YearDetailView: View {
             .background(.bar)
             .accessibilityLabel(
                 excludedCount > 0
-                    ? "\(includedCount) albums included in export, \(excludedCount) albums hidden from export"
-                    : "\(includedCount) favorite albums"
+                ? "\(includedCount) albums included in export, \(excludedCount) albums hidden from export"
+                : "\(includedCount) favorite albums"
             )
         }
         .navigationTitle(String(year))
@@ -91,27 +144,27 @@ struct YearDetailView: View {
                     Button {
                         copyAsJSON()
                     } label: {
-                        Label("Copy as JSON", systemImage: "doc.on.doc")
+                        Label("Copy as JSON", systemImage: "document.on.document.fill")
                     }
-
+                    
                     Button {
                         copyAsPlainText()
                     } label: {
-                        Label("Copy as Plain Text", systemImage: "text.page")
+                        Label("Copy as Plain Text", systemImage: "text.page.fill")
                     }
-
+                    
                     Button {
                         copyAsMarkdown()
                     } label: {
                         Label("Copy as Markdown List", systemImage: "list.star")
                     }
-
+                    
                     Divider()
-
+                    
                     Button {
                         downloadJSON()
                     } label: {
-                        Label("Download JSON", systemImage: "doc.text")
+                        Label("Download JSON", systemImage: "text.document.fill")
                     }
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
@@ -132,72 +185,74 @@ struct YearDetailView: View {
         .onChange(of: searchText) { _, _ in
             // Reset selection anchor when search changes to prevent stale indices
             lastClickedIndex = nil
+            // Reset to "All Albums" view when search changes
+            selectedView = .all
         }
     }
-
+    
     private func copyAsJSON() {
-        guard let data = musicManager.exportJSON(albums: filteredAlbums),
+        guard let data = musicManager.exportJSON(albums: displayedAlbums),
               let jsonString = String(data: data, encoding: .utf8) else { return }
-
+        
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(jsonString, forType: .string)
-
+        
         exportedCount = includedCount
         copyFormat = "JSON"
         showingCopySuccess = true
     }
-
+    
     private func copyAsPlainText() {
         guard !includedAlbums.isEmpty else { return }
-
+        
         let lines = includedAlbums.map { album in
             let url = album.itunesId > 0
             ? "https://music.apple.com/us/album/\(album.itunesId)"
             : ""
             return "“\(album.album)” by \(album.artist): \(url)"
         }
-
+        
         let list = lines.joined(separator: "\n")
-
+        
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(list, forType: .string)
-
+        
         exportedCount = includedAlbums.count
         copyFormat = "List"
         showingCopySuccess = true
     }
-
+    
     private func copyAsMarkdown() {
         guard !includedAlbums.isEmpty else { return }
-
+        
         let lines = includedAlbums.map { album in
             let url = album.itunesId > 0
             ? "https://music.apple.com/us/album/\(album.itunesId)"
             : ""
             return "- “[\(album.album)](\(url))” by \(album.artist)"
         }
-
+        
         let markdown = lines.joined(separator: "\n")
-
+        
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(markdown, forType: .string)
-
+        
         exportedCount = includedAlbums.count
         copyFormat = "Markdown"
         showingCopySuccess = true
     }
-
+    
     private func downloadJSON() {
-        guard let data = musicManager.exportJSON(albums: filteredAlbums) else { return }
-
+        guard let data = musicManager.exportJSON(albums: displayedAlbums) else { return }
+        
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "\(year).json"
         panel.canCreateDirectories = true
-
+        
         if panel.runModal() == .OK, let url = panel.url {
             do {
                 try data.write(to: url)
@@ -208,14 +263,14 @@ struct YearDetailView: View {
             }
         }
     }
-
+    
     private func handleAlbumClick(index: Int, album: AlbumEntry, isShiftClick: Bool) {
         if isShiftClick, let lastIndex = lastClickedIndex {
             // Range selection: select all albums between lastIndex and current index
             let startIndex = min(lastIndex, index)
             let endIndex = max(lastIndex, index)
-            let albumsInRange = Array(filteredAlbums[startIndex...endIndex])
-
+            let albumsInRange = Array(displayedAlbums[startIndex...endIndex])
+            
             // Determine target state based on the clicked album's current state
             let targetExcluded = !musicManager.isExcluded(album)
             musicManager.setExclusion(for: albumsInRange, excluded: targetExcluded)
@@ -223,7 +278,28 @@ struct YearDetailView: View {
             // Single click: toggle just this album
             musicManager.toggleExclusion(for: album)
         }
-
+        
         lastClickedIndex = index
+    }
+    
+    // Empty state for Top Albums view
+    private var topAlbumsEmptyState: some View {
+        VStack(spacing: 24) {
+            Label("No Top Albums Yet", systemImage: "heart.slash.fill")
+                .font(.largeTitle.bold())
+            
+            VStack(spacing: 12) {
+                Text("Top Albums appear here when you've listened to them at least \(topAlbumsThreshold) times")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Text("Keep listening to discover your favorites!")
+                    .foregroundStyle(.secondary)
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -32,6 +32,9 @@ struct AlbumEntry: Codable, Identifiable {
     let dateAdded: String
     let contentRating: String
     
+    // Play count (enriched separately from main cache)
+    let playCount: Int?
+    
     // Use UUID for SwiftUI list identity
     let id: UUID
     
@@ -54,7 +57,8 @@ struct AlbumEntry: Codable, Identifiable {
         releaseDate: String = "",
         trackCount: Int = 0,
         dateAdded: String = "",
-        contentRating: String = ""
+        contentRating: String = "",
+        playCount: Int? = nil
     ) {
         self.album = album
         self.artist = artist
@@ -68,6 +72,7 @@ struct AlbumEntry: Codable, Identifiable {
         self.trackCount = trackCount
         self.dateAdded = dateAdded
         self.contentRating = contentRating
+        self.playCount = playCount
         self.id = UUID()
     }
     
@@ -84,6 +89,7 @@ struct AlbumEntry: Codable, Identifiable {
         case trackCount
         case dateAdded
         case contentRating
+        case playCount
         // Legacy support
         case cover
     }
@@ -113,6 +119,7 @@ struct AlbumEntry: Codable, Identifiable {
         trackCount = try container.decodeIfPresent(Int.self, forKey: .trackCount) ?? 0
         dateAdded = try container.decodeIfPresent(String.self, forKey: .dateAdded) ?? ""
         contentRating = try container.decodeIfPresent(String.self, forKey: .contentRating) ?? ""
+        playCount = try container.decodeIfPresent(Int.self, forKey: .playCount)
         id = UUID()
     }
     
@@ -130,5 +137,6 @@ struct AlbumEntry: Codable, Identifiable {
         try container.encode(trackCount, forKey: .trackCount)
         try container.encode(dateAdded, forKey: .dateAdded)
         try container.encode(contentRating, forKey: .contentRating)
+        try container.encodeIfPresent(playCount, forKey: .playCount)
     }
 }

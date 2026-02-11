@@ -15,7 +15,7 @@ struct YearListView: View {
     let lastUpdated: Date?
     let searchText: String
     let matchingAlbumsCount: (Int) -> Int
-
+    
     var body: some View {
         List(selection: $selectedYear) {
             VStack(alignment: .leading, spacing: 4) {
@@ -27,6 +27,7 @@ struct YearListView: View {
                         .scaledToFit()
                         .frame(height: 34)
                         .accessibilityHidden(true)
+                        .foregroundStyle(.red)
                 }
                 .font(.largeTitle.bold())
                 Text("\(totalFavorites) favorite albums")
@@ -34,13 +35,13 @@ struct YearListView: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
-
+            
             Divider()
-
+            
             ForEach(filteredYears, id: \.self) { year in
                 let albumCount = searchText.isEmpty
-                    ? (albumsByYear[year]?.count ?? 0)
-                    : matchingAlbumsCount(year)
+                ? (albumsByYear[year]?.count ?? 0)
+                : matchingAlbumsCount(year)
                 let countLabel = searchText.isEmpty ? "albums" : "matches"
                 
                 HStack {
@@ -61,7 +62,7 @@ struct YearListView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(year), \(albumCount) \(countLabel)")
             }
-
+            
             if let lastUpdated = lastUpdated {
                 Divider()
                 Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
