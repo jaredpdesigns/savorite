@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var searchText: String = ""
     @State private var hasCheckedAuthorization: Bool = false
     @AppStorage("sidebarGrouping") private var sidebarGrouping: SidebarGrouping = .byYear
+    @State private var showNoConnection = false
     
     // Determines if we should show the split view (sidebar + detail)
     private var shouldShowSplitView: Bool {
@@ -169,8 +170,13 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        Task {
-                            await musicManager.refreshLibrary()
+                        if musicManager.isConnected {
+                            showNoConnection = false
+                            Task {
+                                await musicManager.refreshLibrary()
+                            }
+                        } else {
+                            showNoConnection = true
                         }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
@@ -179,7 +185,14 @@ struct ContentView: View {
                 }
             }
         } detail: {
-            if sidebarGrouping == .none {
+            if showNoConnection {
+                NoConnectionView {
+                    if musicManager.isConnected {
+                        showNoConnection = false
+                        await musicManager.refreshLibrary()
+                    }
+                }
+            } else if sidebarGrouping == .none {
                 YearDetailView(
                     title: "All Favorites",
                     albums: allAlbums,
@@ -199,6 +212,11 @@ struct ContentView: View {
         }
         .searchable(text: $searchText, prompt: "Search albums or artists")
         .frame(minWidth: 800, minHeight: 500)
+        .onChange(of: musicManager.isConnected) { _, connected in
+            if connected && showNoConnection {
+                showNoConnection = false
+            }
+        }
     }
     
     // MARK: - Single Pane View (authorization, loading, empty states)
@@ -227,12 +245,11 @@ struct ContentView: View {
                 currentCount: musicManager.loadingCurrentCount,
                 totalCount: musicManager.loadingTotalCount
             )
-        } else if musicManager.albumsByYear.isEmpty {
-            NoFavoritesView {
+        } else if musicManager.albumsByYear.isEmpty && !musicManager.isConnected {
+            NoConnectionView {
                 await musicManager.refreshLibrary()
             }
-        } else {
-            // Fallback (shouldn't normally reach here)
+        } else if musicManager.albumsByYear.isEmpty {
             NoFavoritesView {
                 await musicManager.refreshLibrary()
             }

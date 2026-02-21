@@ -9,7 +9,7 @@ import SwiftUI
 
 struct EmptyStateView: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 24) {
             Label("No Year Selected", systemImage: "music.note.list")
                 .font(.largeTitle.bold())
             
@@ -17,6 +17,7 @@ struct EmptyStateView: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
         }
+        .padding()
     }
 }
 

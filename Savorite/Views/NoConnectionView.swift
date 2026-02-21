@@ -1,30 +1,30 @@
 //
-//  NoFavoritesView.swift
+//  NoConnectionView.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/3/26.
+//  Created by Jared Pendergraft on 2/20/26.
 //
 
 import SwiftUI
 
-struct NoFavoritesView: View {
-    let onRefresh: () async -> Void
+struct NoConnectionView: View {
+    let onRetry: () async -> Void
     
     var body: some View {
         VStack(spacing: 24) {
-            Label("No Favorite Albums Found", systemImage: "star.slash.fill")
+            Label("No Internet Connection", systemImage: "wifi.slash")
                 .font(.largeTitle.bold())
             
-            Text("Favorite albums in Apple Music to see them here")
+            Text("Connect to the internet to update your library")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             
             Button {
                 Task {
-                    await onRefresh()
+                    await onRetry()
                 }
             } label: {
-                Label("Refresh Library", systemImage: "arrow.clockwise")
+                Label("Try Again", systemImage: "arrow.clockwise")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
@@ -34,5 +34,5 @@ struct NoFavoritesView: View {
 }
 
 #Preview {
-    NoFavoritesView {}
+    NoConnectionView {}
 }

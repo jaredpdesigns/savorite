@@ -42,11 +42,5 @@ struct AuthorizationPromptView: View {
 }
 
 #Preview {
-    NavigationSplitView {
-        AuthorizationPromptView {
-            // Preview action
-        }
-    } detail: {
-        Text("Detail")
-    }
+    AuthorizationPromptView {}
 }

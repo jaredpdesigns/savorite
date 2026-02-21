@@ -7,6 +7,7 @@
 
 import Foundation
 import MusicKit
+import Network
 import Observation
 
 /* MARK: - Error Types */
@@ -145,6 +146,7 @@ class MusicManager {
     var errorMessage: String?
     var totalAlbumsInLibrary = 0
     var lastUpdated: Date?
+    var isConnected = true
     
     /* Loading progress tracking */
     var loadingCurrentCount = 0
@@ -157,6 +159,18 @@ class MusicManager {
     var playCountsByLibraryId: [String: Int] = [:]
     var isLoadingPlayCounts = false
     var playCountLastUpdated: Date?
+    
+    private let monitor = NWPathMonitor()
+    
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            Task { @MainActor in
+                self.isConnected = path.status == .satisfied
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "NetworkMonitor"))
+    }
     
     // Only favorites are stored/displayed
     var sortedYears: [Int] {
@@ -315,6 +329,11 @@ class MusicManager {
     
     // Fetch albums using Apple Music API (cloud library)
     func fetchFavoriteAlbums(incremental: Bool = false) async {
+        guard isConnected else {
+            errorMessage = "No internet connection. Connect to the internet and try again."
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         
