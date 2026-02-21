@@ -15,10 +15,12 @@ struct YearListView: View {
     let lastUpdated: Date?
     let searchText: String
     let matchingAlbumsCount: (Int) -> Int
+    @Binding var sidebarGrouping: SidebarGrouping
+    let allMatchingCount: Int
     
     var body: some View {
-        List(selection: $selectedYear) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(spacing: 0) {
+            List(selection: $selectedYear) {
                 Label {
                     Text("Savorite")
                 } icon: {
@@ -30,46 +32,79 @@ struct YearListView: View {
                         .foregroundStyle(.red)
                 }
                 .font(.largeTitle.bold())
-                Text("\(totalFavorites) favorite albums")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
-            
-            Divider()
-            
-            ForEach(filteredYears, id: \.self) { year in
-                let albumCount = searchText.isEmpty
-                ? (albumsByYear[year]?.count ?? 0)
-                : matchingAlbumsCount(year)
-                let countLabel = searchText.isEmpty ? "albums" : "matches"
                 
                 HStack {
-                    Text(String(year))
-                        .font(.headline)
+                    Text("\(totalFavorites) Favorite Albums")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                     Spacer()
-                    if searchText.isEmpty {
-                        Text("\(albumsByYear[year]?.count ?? 0) albums")
+                    Menu {
+                        Picker("Grouping", selection: $sidebarGrouping) {
+                            Text("Group by Year").tag(SidebarGrouping.byYear)
+                            Text("No Grouping").tag(SidebarGrouping.none)
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
                             .foregroundStyle(.secondary)
-                            .font(.body)
-                    } else {
-                        Text("\(matchingAlbumsCount(year)) matches")
-                            .foregroundStyle(.secondary)
-                            .font(.body)
+                            .imageScale(.large)
+                    }
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.plain)
+                }
+                
+                Divider()
+                
+                if sidebarGrouping == .none {
+                    let count = searchText.isEmpty ? totalFavorites : allMatchingCount
+                    let label = searchText.isEmpty ? "albums" : "matches"
+                    
+                    HStack {
+                        Text("All Favorites")
+                    }
+                    .tag(0)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("All Favorites, \(count) \(label)")
+                } else {
+                    ForEach(filteredYears, id: \.self) { year in
+                        let albumCount = searchText.isEmpty
+                        ? (albumsByYear[year]?.count ?? 0)
+                        : matchingAlbumsCount(year)
+                        let countLabel = searchText.isEmpty ? "albums" : "matches"
+                        
+                        HStack {
+                            Text(String(year))
+                                .font(.headline)
+                            Spacer()
+                            if searchText.isEmpty {
+                                Text("\(albumsByYear[year]?.count ?? 0) albums")
+                                    .foregroundStyle(.secondary)
+                                    .font(.body)
+                            } else {
+                                Text("\(matchingAlbumsCount(year)) matches")
+                                    .foregroundStyle(.secondary)
+                                    .font(.body)
+                            }
+                        }
+                        .tag(year)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(year), \(albumCount) \(countLabel)")
                     }
                 }
-                .tag(year)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(year), \(albumCount) \(countLabel)")
             }
+            .listStyle(.sidebar)
             
             if let lastUpdated = lastUpdated {
-                Divider()
-                Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
-                    .font(.body)
-                    .foregroundStyle(.tertiary)
+                VStack(spacing: 16) {
+                    Divider()
+                    Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.bottom, 16)
+                
             }
         }
-        .listStyle(.sidebar)
     }
 }

@@ -10,7 +10,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct YearDetailView: View {
-    let year: Int
+    let title: String
     let albums: [AlbumEntry]
     let musicManager: MusicManager
     let searchText: String
@@ -139,7 +139,7 @@ struct YearDetailView: View {
                 : "\(includedCount) favorite albums"
             )
         }
-        .navigationTitle(String(year))
+        .navigationTitle(title)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -177,7 +177,7 @@ struct YearDetailView: View {
         .alert("Download Successful", isPresented: $showingExportSuccess) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Saved \(exportedCount) albums to \(String(year)).json")
+            Text("Saved \(exportedCount) albums to \(title).json")
         }
         .alert("Copied to Clipboard", isPresented: $showingCopySuccess) {
             Button("OK", role: .cancel) {}
@@ -252,7 +252,7 @@ struct YearDetailView: View {
         
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "\(year).json"
+        panel.nameFieldStringValue = "\(title).json"
         panel.canCreateDirectories = true
         
         if panel.runModal() == .OK, let url = panel.url {

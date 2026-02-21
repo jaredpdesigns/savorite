@@ -94,13 +94,42 @@ struct AlbumCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .shadow(color: isExcluded ? .clear : .black.opacity(0.25), radius: 4, y: 2)
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(album.album)
-                    .font(.headline)
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(album.album)
+                        .font(.headline)
+                    
+                    Text(album.artist)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
                 
-                Text(album.artist)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                
+                Menu {
+                    Button {
+                        onToggle(false)
+                    } label: {
+                        Label(
+                            isExcluded ? "Include in Export" : "Exclude from Export",
+                            systemImage: "star.slash.fill"
+                        )
+                    }
+                    
+                    if let url = URL(string: album.link), !album.link.isEmpty {
+                        Divider()
+                        Button {
+                            NSWorkspace.shared.open(url)
+                        } label: {
+                            Label("Open in Apple Music", systemImage: "music.pages.fill")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .menuIndicator(.hidden)
+                .buttonStyle(.plain)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -110,25 +139,6 @@ struct AlbumCard: View {
         .onTapGesture {
             let isShiftHeld = NSEvent.modifierFlags.contains(.shift)
             onToggle(isShiftHeld)
-        }
-        .contextMenu {
-            Button {
-                onToggle(false)
-            } label: {
-                Label(
-                    isExcluded ? "Include in Export" : "Exclude from Export",
-                    systemImage: "star.slash.fill"
-                ).font(.body)
-            }
-            
-            if let url = URL(string: album.link), !album.link.isEmpty {
-                Divider()
-                Button {
-                    NSWorkspace.shared.open(url)
-                } label: {
-                    Label("Open in Apple Music", systemImage: "music.pages.fill").font(.body)
-                }
-            }
         }
     }
 }

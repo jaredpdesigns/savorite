@@ -8,11 +8,17 @@
 import MusicKit
 import SwiftUI
 
+enum SidebarGrouping: String {
+    case byYear
+    case none
+}
+
 struct ContentView: View {
     @State private var musicManager = MusicManager()
     @State private var selectedYear: Int?
     @State private var searchText: String = ""
     @State private var hasCheckedAuthorization: Bool = false
+    @AppStorage("sidebarGrouping") private var sidebarGrouping: SidebarGrouping = .byYear
     
     // Determines if we should show the split view (sidebar + detail)
     private var shouldShowSplitView: Bool {
@@ -80,6 +86,21 @@ struct ContentView: View {
         }.count
     }
     
+    private var allAlbums: [AlbumEntry] {
+        musicManager.albumsByYear.values
+            .flatMap { $0 }
+            .sorted { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
+    }
+    
+    private var allMatchingCount: Int {
+        if searchText.isEmpty { return musicManager.totalFavorites }
+        let lowercasedSearch = searchText.lowercased()
+        return allAlbums.filter { album in
+            album.album.lowercased().contains(lowercasedSearch) ||
+            album.artist.lowercased().contains(lowercasedSearch)
+        }.count
+    }
+    
     var body: some View {
         Group {
             if shouldShowSplitView {
@@ -104,15 +125,26 @@ struct ContentView: View {
             }
         }
         .onChange(of: searchText) { oldValue, newValue in
-            // If current selection is not in filtered results, switch to first matching year
-            if let selected = selectedYear, !filteredYears.contains(selected) {
-                selectedYear = filteredYears.first
+            if sidebarGrouping == .byYear {
+                if let selected = selectedYear, !filteredYears.contains(selected) {
+                    selectedYear = filteredYears.first
+                }
             }
         }
         .onChange(of: musicManager.sortedYears) { oldValue, newValue in
-            // Auto-select the first year when albums are loaded
-            if selectedYear == nil, let firstYear = newValue.first {
-                selectedYear = firstYear
+            if selectedYear == nil {
+                if sidebarGrouping == .none {
+                    selectedYear = 0
+                } else if let firstYear = filteredYears.first {
+                    selectedYear = firstYear
+                }
+            }
+        }
+        .onChange(of: sidebarGrouping) { _, newValue in
+            if newValue == .none {
+                selectedYear = 0
+            } else {
+                selectedYear = filteredYears.first
             }
         }
     }
@@ -128,18 +160,39 @@ struct ContentView: View {
                 totalFavorites: musicManager.totalFavorites,
                 lastUpdated: musicManager.lastUpdated,
                 searchText: searchText,
-                matchingAlbumsCount: matchingAlbumsCount
+                matchingAlbumsCount: matchingAlbumsCount,
+                sidebarGrouping: $sidebarGrouping,
+                allMatchingCount: allMatchingCount
             )
             .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 300)
             .navigationTitle("Savorite")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    refreshButton
+                    Button {
+                        Task {
+                            await musicManager.refreshLibrary()
+                        }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .help("Refresh favorites and play counts")
                 }
             }
         } detail: {
-            if let year = selectedYear, let albums = musicManager.albumsByYear[year] {
-                YearDetailView(year: year, albums: albums, musicManager: musicManager, searchText: searchText)
+            if sidebarGrouping == .none {
+                YearDetailView(
+                    title: "All Favorites",
+                    albums: allAlbums,
+                    musicManager: musicManager,
+                    searchText: searchText
+                )
+            } else if let year = selectedYear, let albums = musicManager.albumsByYear[year] {
+                YearDetailView(
+                    title: String(year),
+                    albums: albums,
+                    musicManager: musicManager,
+                    searchText: searchText
+                )
             } else {
                 EmptyStateView()
             }
@@ -184,19 +237,6 @@ struct ContentView: View {
                 await musicManager.refreshLibrary()
             }
         }
-    }
-    
-    /* MARK: - Shared Toolbar Button */
-    
-    private var refreshButton: some View {
-        Button {
-            Task {
-                await musicManager.refreshLibrary()
-            }
-        } label: {
-            Label("Refresh", systemImage: "arrow.clockwise")
-        }
-        .help("Refresh favorites and play counts")
     }
     
     /* MARK: - Helper Methods */
