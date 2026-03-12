@@ -12,8 +12,7 @@ struct AlbumCard: View {
     let album: AlbumEntry
     let isExcluded: Bool
     let playCount: Int?  /* Optional play count passed from parent */
-    let showPlayCountBadge: Bool  /* Whether to show the play count badge */
-    let onToggle: (Bool) -> Void  /* Bool indicates if shift key was held */
+    let onToggle: () -> Void
     
     private var playCountText: String {
         guard let count = playCount else { return "" }
@@ -69,19 +68,6 @@ struct AlbumCard: View {
                     }
                 }
                 .opacity(isExcluded ? 0.25 : 1.0)
-                .overlay(alignment: .topLeading) {
-                    /* Play count badge in top-left corner with glass effect */
-                    if showPlayCountBadge, let count = playCount, count > 0 {
-                        Text(playCountText)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .padding(8)
-                            .accessibilityHidden(true)
-                    }
-                }
                 
                 /* Excluded icon centered */
                 if isExcluded {
@@ -108,7 +94,7 @@ struct AlbumCard: View {
                 
                 Menu {
                     Button {
-                        onToggle(false)
+                        onToggle()
                     } label: {
                         Label(
                             isExcluded ? "Include in Export" : "Exclude from Export",
@@ -135,11 +121,6 @@ struct AlbumCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabelText)
         .accessibilityHint(accessibilityHintText)
-        .accessibilityAddTraits(.isButton)
-        .onTapGesture {
-            let isShiftHeld = NSEvent.modifierFlags.contains(.shift)
-            onToggle(isShiftHeld)
-        }
     }
 }
 
@@ -157,9 +138,8 @@ struct AlbumCard: View {
             releaseDate: "2025-01-17"
         ),
         isExcluded: false,
-        playCount: 12,
-        showPlayCountBadge: true
-    ) { _ in }
+        playCount: 12
+    ) { }
         .frame(width: 220)
         .padding()
 }
@@ -178,9 +158,8 @@ struct AlbumCard: View {
             releaseDate: "2025-01-17"
         ),
         isExcluded: true,
-        playCount: nil,
-        showPlayCountBadge: false
-    ) { _ in }
+        playCount: nil
+    ) { }
         .frame(width: 220)
         .padding()
 }

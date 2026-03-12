@@ -190,17 +190,6 @@ class MusicManager {
         saveExclusionsToCache()
     }
     
-    func setExclusion(for albums: [AlbumEntry], excluded: Bool) {
-        for album in albums {
-            if excluded {
-                excludedLibraryIds.insert(album.libraryId)
-            } else {
-                excludedLibraryIds.remove(album.libraryId)
-            }
-        }
-        saveExclusionsToCache()
-    }
-    
     func isExcluded(_ album: AlbumEntry) -> Bool {
         excludedLibraryIds.contains(album.libraryId)
     }
@@ -594,7 +583,7 @@ class MusicManager {
                         albumPlayCount = playedTracks[percentileIndex]
                     }
                     
-                    /* Apply threshold: at least 50% of tracks must have been played */
+                    /* Apply threshold: at least 40% of tracks must have been played */
                     let nonZeroTracks = trackPlayCounts.filter { $0 > 0 }.count
                     let percentagePlayed = Double(nonZeroTracks) / Double(trackPlayCounts.count)
                     
@@ -602,7 +591,7 @@ class MusicManager {
                     let cachedCount = playCountsByLibraryId[libraryId]
                     
                     /* Only update if play count > 0, threshold met, and value changed */
-                    if albumPlayCount > 0 && percentagePlayed >= 0.5 {
+                    if albumPlayCount > 0 && percentagePlayed >= 0.4 {
                         if cachedCount != albumPlayCount {
                             newPlayCounts[libraryId] = albumPlayCount
                         }

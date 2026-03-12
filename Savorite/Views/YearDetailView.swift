@@ -19,7 +19,6 @@ struct YearDetailView: View {
     @State private var showingCopySuccess = false
     @State private var exportedCount = 0
     @State private var copyFormat = ""
-    @State private var lastClickedIndex: Int?
     @State private var selectedView: AlbumView = .all
     
     enum AlbumView: String, CaseIterable {
@@ -32,7 +31,7 @@ struct YearDetailView: View {
     ]
     
     // Minimum play count threshold for "Top Albums"
-    private let topAlbumsThreshold = 5
+    private let topAlbumsThreshold = 3
     
     // Filter albums based on search text
     private var filteredAlbums: [AlbumEntry] {
@@ -105,14 +104,13 @@ struct YearDetailView: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 20) {
-                        ForEach(Array(displayedAlbums.enumerated()), id: \.element.id) { index, album in
+                        ForEach(displayedAlbums) { album in
                             AlbumCard(
                                 album: album,
                                 isExcluded: musicManager.isExcluded(album),
-                                playCount: musicManager.playCountsByLibraryId[album.libraryId],
-                                showPlayCountBadge: selectedView == .top && searchText.isEmpty
-                            ) { isShiftClick in
-                                handleAlbumClick(index: index, album: album, isShiftClick: isShiftClick)
+                                playCount: musicManager.playCountsByLibraryId[album.libraryId]
+                            ) {
+                                musicManager.toggleExclusion(for: album)
                             }
                         }
                     }
@@ -185,9 +183,6 @@ struct YearDetailView: View {
             Text("Copied \(exportedCount) albums as \(copyFormat)")
         }
         .onChange(of: searchText) { _, _ in
-            // Reset selection anchor when search changes to prevent stale indices
-            lastClickedIndex = nil
-            // Reset to "All Albums" view when search changes
             selectedView = .all
         }
     }
@@ -264,24 +259,6 @@ struct YearDetailView: View {
                 // Silently fail - user will see file wasn't created
             }
         }
-    }
-    
-    private func handleAlbumClick(index: Int, album: AlbumEntry, isShiftClick: Bool) {
-        if isShiftClick, let lastIndex = lastClickedIndex {
-            // Range selection: select all albums between lastIndex and current index
-            let startIndex = min(lastIndex, index)
-            let endIndex = max(lastIndex, index)
-            let albumsInRange = Array(displayedAlbums[startIndex...endIndex])
-            
-            // Determine target state based on the clicked album's current state
-            let targetExcluded = !musicManager.isExcluded(album)
-            musicManager.setExclusion(for: albumsInRange, excluded: targetExcluded)
-        } else {
-            // Single click: toggle just this album
-            musicManager.toggleExclusion(for: album)
-        }
-        
-        lastClickedIndex = index
     }
     
     // Empty state for Top Albums view
