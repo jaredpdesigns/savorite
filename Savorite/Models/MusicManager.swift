@@ -85,6 +85,7 @@ struct CatalogAlbum: Codable {
 
 struct CatalogAlbumAttributes: Codable {
     let url: String?
+    let releaseDate: String?
 }
 
 struct TracksRelationship: Codable {
@@ -441,8 +442,13 @@ class MusicManager {
                     }
                 }
                 
-                // Parse release date and year
-                let releaseDateString = attrs.releaseDate ?? ""
+                /*
+                 Prefer the catalog album's releaseDate over the library album's,
+                 since the library date can reflect an earlier single/track release
+                 rather than the album's actual release date
+                 */
+                let catalogReleaseDate = album.relationships?.catalog?.data?.first?.attributes?.releaseDate
+                let releaseDateString = catalogReleaseDate ?? attrs.releaseDate ?? ""
                 var year = Calendar.current.component(.year, from: Date())
                 if !releaseDateString.isEmpty {
                     let dateFormatter = DateFormatter()
@@ -459,7 +465,7 @@ class MusicManager {
                 // Only include favorites
                 guard isFavorite else { continue }
                 
-                // In incremental mode, prefer existing cached data
+                // In incremental mode, reuse existing cached entry but still bucket by freshly-parsed year
                 let entry: AlbumEntry
                 if incremental, let existing = existingAlbumsByLibraryId[album.id] {
                     entry = existing
