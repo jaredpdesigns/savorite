@@ -500,6 +500,13 @@ class MusicManager {
             /* Save to cache */
             saveToCache()
             
+            /*
+             Artwork lives on Apple's CDN -- local copies from the sync
+             are only useful while scrolling. Flush them so they don't
+             accumulate across sessions.
+             */
+            CacheCleanup.clearAfterSync()
+            
         } catch {
             errorMessage = MusicManagerError.fetchFailed(underlying: error).errorDescription
         }

@@ -26,15 +26,31 @@ struct LoadingView: View {
             .font(.largeTitle.bold())
             
             if totalCount > 0 {
-                Text("Fetching \(totalCount.formatted()) albums")
+                Text("Fetching albums")
                     .font(.body)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
                 
-                ProgressView(value: Double(currentCount), total: Double(totalCount))
-                    .progressViewStyle(.linear)
+                VStack(spacing: 4) {
+                    ProgressView(value: Double(currentCount), total: Double(totalCount))
+                        .progressViewStyle(.linear)
+                        .frame(maxWidth: 200)
+                        .accessibilityLabel("Loading progress")
+                        .accessibilityValue("\(currentCount) of \(totalCount) albums")
+                    
+                    HStack() {
+                        Text("\(currentCount)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        Spacer()
+                        Text("\(totalCount)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                     .frame(maxWidth: 200)
-                    .accessibilityLabel("Loading progress")
-                    .accessibilityValue("\(currentCount) of \(totalCount) albums")
+                }
             } else {
                 ProgressView()
                     .accessibilityLabel("Loading")

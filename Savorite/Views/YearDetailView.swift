@@ -15,10 +15,7 @@ struct YearDetailView: View {
     let musicManager: MusicManager
     let searchText: String
     
-    @State private var showingExportSuccess = false
-    @State private var showingCopySuccess = false
-    @State private var exportedCount = 0
-    @State private var copyFormat = ""
+    @State private var toastMessage: String?
     @State private var selectedView: AlbumView = .all
     
     enum AlbumView: String, CaseIterable {
@@ -172,18 +169,32 @@ struct YearDetailView: View {
                 .disabled(includedCount == 0)
             }
         }
-        .alert("Download Successful", isPresented: $showingExportSuccess) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Saved \(exportedCount) albums to \(title).json")
+        .overlay(alignment: .topTrailing) {
+            if let message = toastMessage {
+                Text(message)
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                    .padding(.top, 8)
+                    .padding(.trailing, 16)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityLabel(message)
+                    .accessibilityAddTraits(.isStaticText)
+            }
         }
-        .alert("Copied to Clipboard", isPresented: $showingCopySuccess) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Copied \(exportedCount) albums as \(copyFormat)")
-        }
+        .animation(.easeInOut(duration: 0.25), value: toastMessage)
         .onChange(of: searchText) { _, _ in
             selectedView = .all
+        }
+    }
+    
+    private func showToast(_ message: String) {
+        toastMessage = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            toastMessage = nil
         }
     }
     
@@ -195,9 +206,7 @@ struct YearDetailView: View {
         pasteboard.clearContents()
         pasteboard.setString(jsonString, forType: .string)
         
-        exportedCount = includedCount
-        copyFormat = "JSON"
-        showingCopySuccess = true
+        showToast("Copied \(includedCount) albums as JSON")
     }
     
     private func copyAsPlainText() {
@@ -216,9 +225,7 @@ struct YearDetailView: View {
         pasteboard.clearContents()
         pasteboard.setString(list, forType: .string)
         
-        exportedCount = includedAlbums.count
-        copyFormat = "List"
-        showingCopySuccess = true
+        showToast("Copied \(includedAlbums.count) albums as plain text")
     }
     
     private func copyAsMarkdown() {
@@ -237,9 +244,7 @@ struct YearDetailView: View {
         pasteboard.clearContents()
         pasteboard.setString(markdown, forType: .string)
         
-        exportedCount = includedAlbums.count
-        copyFormat = "Markdown"
-        showingCopySuccess = true
+        showToast("Copied \(includedAlbums.count) albums as Markdown")
     }
     
     private func downloadJSON() {
@@ -253,8 +258,7 @@ struct YearDetailView: View {
         if panel.runModal() == .OK, let url = panel.url {
             do {
                 try data.write(to: url)
-                exportedCount = includedCount
-                showingExportSuccess = true
+                showToast("Saved \(includedCount) albums to \(title).json")
             } catch {
                 // Silently fail - user will see file wasn't created
             }
