@@ -2,13 +2,12 @@
 //  MusicManager.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/3/26.
-//
 
 import Foundation
 import MusicKit
 import Network
 import Observation
+import SwiftUI
 
 /* MARK: - Error Types */
 
@@ -34,7 +33,6 @@ enum MusicManagerError: LocalizedError {
 
 /* MARK: - Response Structures */
 
-/* Response structures for Apple Music API */
 struct LibraryAlbumsResponse: Codable {
     let data: [LibraryAlbum]
     let next: String?
@@ -173,9 +171,9 @@ class MusicManager {
         monitor.start(queue: DispatchQueue(label: "NetworkMonitor"))
     }
     
-    // Only favorites are stored/displayed
+    // Filter out invalid year keys (e.g. 0)
     var sortedYears: [Int] {
-        albumsByYear.keys.sorted(by: >)
+        albumsByYear.keys.filter { $0 > 0 }.sorted(by: >)
     }
     
     var totalFavorites: Int {
@@ -211,7 +209,6 @@ class MusicManager {
     }
     
     private func saveExclusionsToCache() {
-        // Update just the exclusions in existing cache
         guard FileManager.default.fileExists(atPath: cacheURL.path) else { return }
         do {
             let data = try Data(contentsOf: cacheURL)
@@ -225,7 +222,7 @@ class MusicManager {
             let newData = try JSONEncoder().encode(newCache)
             try newData.write(to: cacheURL)
         } catch {
-            // Silently fail - exclusions can be re-saved later
+            // Silently fail
         }
     }
     
@@ -251,7 +248,6 @@ class MusicManager {
             totalAlbumsInLibrary = cache.totalAlbums
             lastUpdated = cache.lastUpdated
             
-            /* Restore excluded albums */
             if let excluded = cache.excludedLibraryIds {
                 excludedLibraryIds = Set(excluded)
             }
@@ -262,9 +258,6 @@ class MusicManager {
         }
     }
     
-    /*
-     Load play count cache if available
-     */
     func loadPlayCountCache() -> Bool {
         guard FileManager.default.fileExists(atPath: playCountCacheURL.path) else {
             return false
@@ -281,7 +274,6 @@ class MusicManager {
         }
     }
     
-    /* Save to cache (preserves existing albums unless new ones provided) */
     private func saveToCache() {
         let cache = AlbumCache(
             albums: albumsByYear,
@@ -295,13 +287,10 @@ class MusicManager {
             try data.write(to: cacheURL)
             lastUpdated = cache.lastUpdated
         } catch {
-            // Silently fail - cache will be regenerated on next launch
+            // Silently fail
         }
     }
     
-    /*
-     Save play count cache
-     */
     private func savePlayCountCache() {
         let cache = PlayCountCache(
             playCountsByLibraryId: playCountsByLibraryId,
@@ -313,12 +302,11 @@ class MusicManager {
             try data.write(to: playCountCacheURL)
             playCountLastUpdated = cache.lastUpdated
         } catch {
-            // Silently fail - cache will be regenerated on next refresh
+            // Silently fail
         }
     }
     
-    // Fetch albums using Apple Music API (cloud library)
-    func fetchFavoriteAlbums(incremental: Bool = false) async {
+    func fetchFavoriteAlbums() async {
         guard isConnected else {
             errorMessage = "No internet connection. Connect to the internet and try again."
             return
@@ -327,52 +315,48 @@ class MusicManager {
         isLoading = true
         errorMessage = nil
         
-        // Build set of existing library IDs for incremental update
-        var existingLibraryIds: Set<String> = []
-        var existingAlbumsByLibraryId: [String: AlbumEntry] = [:]
-        if incremental {
-            for (_, albums) in albumsByYear {
-                for album in albums {
-                    existingLibraryIds.insert(album.libraryId)
-                    existingAlbumsByLibraryId[album.libraryId] = album
-                }
-            }
-        } else {
-            albumsByYear = [:]
-        }
+        // Reset counts so LoadingView renders "Connecting to Apple Music..."
+        loadingCurrentCount = 0
+        loadingTotalCount = 0
+        
+        // Delay handshake to give Apple Music's cloud CDN time to process recent favoriting actions
+        try? await Task.sleep(for: .seconds(5))
+        
+        albumsByYear = [:]
         
         var allAlbums: [LibraryAlbum] = []
         var nextURL: String? = "https://api.music.apple.com/v1/me/library/albums?limit=100&include=catalog,tracks.catalog&extend=inFavorites"
         
-        /* Fetch all pages */
-        loadingCurrentCount = 0
-        loadingTotalCount = 0
         var totalSet = false
         do {
             while let urlString = nextURL {
                 guard let url = URL(string: urlString) else { break }
                 
-                let request = MusicDataRequest(urlRequest: URLRequest(url: url))
+                // Bypass local HTTP caches to guarantee fresh response
+                var urlRequest = URLRequest(url: url)
+                urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
+                
+                let request = MusicDataRequest(urlRequest: urlRequest)
                 let response = try await request.response()
                 
                 let decoder = JSONDecoder()
                 let albumsResponse = try decoder.decode(LibraryAlbumsResponse.self, from: response.data)
                 
-                allAlbums.append(contentsOf: albumsResponse.data)
-                
-                // Only set total once from the first response to avoid jumpy progress
+                // 1. Set total FIRST on the very first batch so LoadingView transitions to 0 / Total
                 if !totalSet, let total = albumsResponse.meta?.total {
                     loadingTotalCount = total
                     totalAlbumsInLibrary = total
                     totalSet = true
+                    
+                    // Brief frame pause to allow SwiftUI to animate the transition to 0% progress
+                    try? await Task.sleep(for: .milliseconds(50))
                 }
                 
-                // Update progress for UI
+                // 2. Now append data and increment current count
+                allAlbums.append(contentsOf: albumsResponse.data)
                 loadingCurrentCount = allAlbums.count
                 
-                // Get next page URL - always append our custom parameters
                 if let next = albumsResponse.next {
-                    // The API's next URL doesn't include our custom parameters, so add them
                     if next.contains("?") {
                         nextURL = "https://api.music.apple.com\(next)&include=catalog,tracks.catalog&extend=inFavorites"
                     } else {
@@ -383,27 +367,20 @@ class MusicManager {
                 }
             }
             
-            /* Process albums - extract catalog IDs from track data */
             var grouped: [Int: [AlbumEntry]] = [:]
             
             for album in allAlbums {
-                
                 let attrs = album.attributes
                 
-                // Skip albums without name or artist
                 guard let albumName = attrs.name, !albumName.isEmpty,
                       let artistName = attrs.artistName, !artistName.isEmpty else {
                     continue
                 }
                 
-                // Get artwork template URL
                 let artworkTemplate = attrs.artwork?.url ?? ""
-                
-                // Extract catalog album ID
                 var catalogAlbumId = 0
                 var albumLink = ""
                 
-                // First try direct catalog relationship on album
                 if let catalogAlbum = album.relationships?.catalog?.data?.first {
                     if let albumId = Int(catalogAlbum.id) {
                         catalogAlbumId = albumId
@@ -419,18 +396,14 @@ class MusicManager {
                     }
                 }
                 
-                // Fallback: try to get catalog ID from first track's playParams
                 if catalogAlbumId == 0,
                    let track = album.relationships?.tracks?.data?.first,
                    let playParams = track.attributes?.playParams,
                    let catalogId = playParams.catalogId,
                    Int(catalogId) != nil {
-                    // The track's catalogId is for the song, but we can look up the album
-                    // For now, we'll note this track has catalog data and try the catalog relationship on track
                     if let catalogSong = track.relationships?.catalog?.data?.first,
                        let songURL = catalogSong.attributes?.url,
                        let urlObj = URL(string: songURL) {
-                        // URL format: https://music.apple.com/us/album/album-name/ALBUM_ID?i=SONG_ID
                         let pathComponents = urlObj.pathComponents
                         if pathComponents.count >= 4 {
                             let potentialAlbumId = pathComponents[pathComponents.count - 1]
@@ -442,69 +415,66 @@ class MusicManager {
                     }
                 }
                 
-                /*
-                 Prefer the catalog album's releaseDate over the library album's,
-                 since the library date can reflect an earlier single/track release
-                 rather than the album's actual release date
-                 */
                 let catalogReleaseDate = album.relationships?.catalog?.data?.first?.attributes?.releaseDate
                 let releaseDateString = catalogReleaseDate ?? attrs.releaseDate ?? ""
-                var year = Calendar.current.component(.year, from: Date())
-                if !releaseDateString.isEmpty {
-                    let dateFormatter = DateFormatter()
-                    dateFormatter.dateFormat = "yyyy-MM-dd"
-                    if let date = dateFormatter.date(from: releaseDateString) {
-                        year = Calendar.current.component(.year, from: date)
-                    } else if releaseDateString.count >= 4, let y = Int(releaseDateString.prefix(4)) {
-                        year = y
+                
+                var parsedYear: Int? = nil
+                
+                if releaseDateString.count >= 4, let extractedYear = Int(releaseDateString.prefix(4)) {
+                    parsedYear = extractedYear
+                }
+                
+                if parsedYear == nil && !releaseDateString.isEmpty {
+                    let formatters = ["yyyy-MM-dd", "yyyy-MM", "yyyy"]
+                    let df = DateFormatter()
+                    df.locale = Locale(identifier: "en_US_POSIX")
+                    
+                    for format in formatters {
+                        df.dateFormat = format
+                        if let date = df.date(from: releaseDateString) {
+                            parsedYear = Calendar.current.component(.year, from: date)
+                            break
+                        }
                     }
                 }
                 
+                let year = parsedYear ?? 0
                 let isFavorite = attrs.inFavorites ?? false
                 
-                // Only include favorites
                 guard isFavorite else { continue }
                 
-                // In incremental mode, reuse existing cached entry but still bucket by freshly-parsed year
-                let entry: AlbumEntry
-                if incremental, let existing = existingAlbumsByLibraryId[album.id] {
-                    entry = existing
-                } else {
-                    entry = AlbumEntry(
-                        album: albumName,
-                        artist: artistName,
-                        link: albumLink,
-                        genre: attrs.genreNames?.first ?? "",
-                        itunesId: catalogAlbumId,
-                        artworkTemplate: artworkTemplate,
-                        libraryId: album.id,
-                        isFavorite: isFavorite,
-                        releaseDate: releaseDateString,
-                        trackCount: attrs.trackCount ?? 0,
-                        dateAdded: attrs.dateAdded ?? "",
-                        contentRating: attrs.contentRating ?? ""
-                    )
-                }
+                let entry = AlbumEntry(
+                    album: albumName,
+                    artist: artistName,
+                    link: albumLink,
+                    genre: attrs.genreNames?.first ?? "",
+                    itunesId: catalogAlbumId,
+                    artworkTemplate: artworkTemplate,
+                    libraryId: album.id,
+                    isFavorite: isFavorite,
+                    releaseDate: releaseDateString,
+                    trackCount: attrs.trackCount ?? 0,
+                    dateAdded: attrs.dateAdded ?? "",
+                    contentRating: attrs.contentRating ?? ""
+                )
                 
                 grouped[year, default: []].append(entry)
             }
             
-            // Sort albums within each year alphabetically by artist
             for year in grouped.keys {
-                grouped[year]?.sort { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
+                grouped[year]?.sort { lhs, rhs in
+                    let artistComparison = lhs.sortArtist.localizedCaseInsensitiveCompare(rhs.sortArtist)
+                    if artistComparison == .orderedSame {
+                        return lhs.album.localizedCaseInsensitiveCompare(rhs.album) == .orderedAscending
+                    }
+                    return artistComparison == .orderedAscending
+                }
             }
             
             albumsByYear = grouped
             totalAlbumsInLibrary = totalFavorites
             
-            /* Save to cache */
             saveToCache()
-            
-            /*
-             Artwork lives on Apple's CDN -- local copies from the sync
-             are only useful while scrolling. Flush them so they don't
-             accumulate across sessions.
-             */
             CacheCleanup.clearAfterSync()
             
         } catch {
@@ -514,14 +484,9 @@ class MusicManager {
         isLoading = false
     }
     
-    /*
-     Enrich albums with play counts using MusicLibraryRequest
-     This runs as a background task after main album cache is loaded
-     */
     func enrichWithPlayCounts() async {
         isLoadingPlayCounts = true
         
-        // Build a map of "artist|album" to library ID from cached albums
         var albumKeyToLibraryId: [String: String] = [:]
         for (_, albums) in albumsByYear {
             for album in albums {
@@ -538,7 +503,6 @@ class MusicManager {
         }
         
         do {
-            /* Fetch all albums using MusicLibraryRequest */
             let request = MusicLibraryRequest<Album>()
             let response = try await request.response()
             
@@ -549,25 +513,21 @@ class MusicManager {
                 return
             }
             
-            /* Calculate play counts for each album */
             var newPlayCounts: [String: Int] = playCountsByLibraryId
             
             for album in albums {
                 let key = "\(album.artistName.lowercased())|\(album.title.lowercased())"
                 
-                /* Look up the library ID from our map */
                 guard let libraryId = albumKeyToLibraryId[key] else {
                     continue
                 }
                 
-                /* Fetch tracks for this album */
                 do {
                     let detailedAlbum = try await album.with([.tracks])
                     guard let tracks = detailedAlbum.tracks else {
                         continue
                     }
                     
-                    // Collect play counts from all tracks
                     var trackPlayCounts: [Int] = []
                     for track in tracks {
                         if case .song(let song) = track {
@@ -577,43 +537,32 @@ class MusicManager {
                     
                     guard !trackPlayCounts.isEmpty else { continue }
                     
-                    /* Calculate play count using 75th percentile of played tracks
-                     This better represents actual album listens than median,
-                     accounting for skipped tracks (intros, interludes) while
-                     avoiding inflation from a few heavily replayed songs */
                     let playedTracks = trackPlayCounts.filter { $0 > 0 }.sorted()
                     let albumPlayCount: Int
                     
                     if playedTracks.isEmpty {
-                        /* No tracks have been played */
                         albumPlayCount = 0
                     } else if playedTracks.count == 1 {
-                        /* Only one track played */
                         albumPlayCount = playedTracks[0]
                     } else {
-                        /* Use 75th percentile of played tracks */
                         let percentileIndex = Int(Double(playedTracks.count - 1) * 0.75)
                         albumPlayCount = playedTracks[percentileIndex]
                     }
                     
-                    /* Apply threshold: at least 40% of tracks must have been played */
                     let nonZeroTracks = trackPlayCounts.filter { $0 > 0 }.count
                     let percentagePlayed = Double(nonZeroTracks) / Double(trackPlayCounts.count)
                     
-                    /* Check if this differs from cached value */
                     let cachedCount = playCountsByLibraryId[libraryId]
                     
-                    /* Only update if play count > 0, threshold met, and value changed */
                     if albumPlayCount > 0 && percentagePlayed >= 0.4 {
                         if cachedCount != albumPlayCount {
                             newPlayCounts[libraryId] = albumPlayCount
                         }
                     } else if albumPlayCount == 0 && cachedCount != nil {
-                        /* Remove from cache if it no longer meets threshold */
                         newPlayCounts.removeValue(forKey: libraryId)
                     }
                 } catch {
-                    /* Skip this album if tracks can't be fetched */
+                    // Skip if tracks can't be fetched
                 }
             }
             
@@ -621,30 +570,21 @@ class MusicManager {
             savePlayCountCache()
             
         } catch {
-            // Silently fail - play counts will be missing but app continues
+            // Silently fail
         }
         
         isLoadingPlayCounts = false
     }
     
-    /* Refresh library - incremental update (preserves cache, adds new favorites and updates play counts) */
     func refreshLibrary() async {
-        /* Preserve user exclusions */
         let savedExclusions = excludedLibraryIds
-        
-        /* Use incremental mode to only add new albums (keeps existing cache) */
-        await fetchFavoriteAlbums(incremental: true)
-        
-        /* Restore exclusions */
+        await fetchFavoriteAlbums()
         excludedLibraryIds = savedExclusions
         saveExclusionsToCache()
-        
-        /* Trigger play count refresh */
         await enrichWithPlayCounts()
     }
     
     func exportJSON(albums: [AlbumEntry]) -> Data? {
-        // Filter out excluded albums
         let includedAlbums = albums.filter { !isExcluded($0) }
         guard !includedAlbums.isEmpty else { return nil }
         
@@ -690,8 +630,6 @@ class MusicManager {
         do {
             let data = try encoder.encode(exportAlbums)
             
-            // Fix Swift's default formatting: remove space before colons
-            // Swift outputs "key" : "value" but standard JSON is "key": "value"
             guard var jsonString = String(data: data, encoding: .utf8) else {
                 return data
             }
@@ -702,5 +640,51 @@ class MusicManager {
             errorMessage = "Failed to encode JSON: \(error.localizedDescription)"
             return nil
         }
+    }
+    
+    /* MARK: - Debug / Local Development Actions */
+    
+    /// Clears local disk caches and memory variables
+    func debugClearCache() {
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: cacheURL)
+        try? fileManager.removeItem(at: playCountCacheURL)
+        
+        albumsByYear = [:]
+        playCountsByLibraryId = [:]
+        totalAlbumsInLibrary = 0
+        lastUpdated = nil
+        playCountLastUpdated = nil
+    }
+    
+    /// Resets authorization status, purges system TCC permissions for Media Library,
+    /// and clears local cache to force a complete first-run state.
+    func debugResetAuthorization() {
+        debugClearCache()
+        
+#if DEBUG
+        if let bundleID = Bundle.main.bundleIdentifier {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+            task.arguments = ["reset", "MediaLibrary", bundleID]
+            try? task.run()
+            task.waitUntilExit()
+        }
+#endif
+        
+        authorizationStatus = .notDetermined
+    }
+}
+
+/* MARK: - FocusedValue Key Extension */
+
+struct MusicManagerFocusedKey: FocusedValueKey {
+    typealias Value = MusicManager
+}
+
+extension FocusedValues {
+    var musicManager: MusicManager? {
+        get { self[MusicManagerFocusedKey.self] }
+        set { self[MusicManagerFocusedKey.self] = newValue }
     }
 }

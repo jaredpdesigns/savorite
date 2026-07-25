@@ -2,8 +2,6 @@
 //  NoFavoritesView.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/3/26.
-//
 
 import SwiftUI
 
@@ -28,11 +26,10 @@ struct NoFavoritesView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .keyboardShortcut("r", modifiers: .command)
+            .accessibilityHint("Scans Apple Music for newly favorited albums")
         }
         .padding()
+        .accessibilityElement(children: .contain)
     }
-}
-
-#Preview {
-    NoFavoritesView {}
 }

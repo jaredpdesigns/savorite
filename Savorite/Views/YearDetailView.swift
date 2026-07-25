@@ -2,8 +2,6 @@
 //  YearDetailView.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/3/26.
-//
 
 import AppKit
 import SwiftUI
@@ -27,10 +25,8 @@ struct YearDetailView: View {
         GridItem(.adaptive(minimum: 220, maximum: 280), spacing: 20, alignment: .top)
     ]
     
-    // Minimum play count threshold for "Top Albums"
     private let topAlbumsThreshold = 3
     
-    // Filter albums based on search text
     private var filteredAlbums: [AlbumEntry] {
         if searchText.isEmpty {
             return albums
@@ -38,11 +34,11 @@ struct YearDetailView: View {
         let lowercasedSearch = searchText.lowercased()
         return albums.filter { album in
             album.album.lowercased().contains(lowercasedSearch) ||
-            album.artist.lowercased().contains(lowercasedSearch)
+            album.artist.lowercased().contains(lowercasedSearch) ||
+            album.sortArtist.lowercased().contains(lowercasedSearch)
         }
     }
     
-    // Filter for top albums (play count >= threshold)
     private var topAlbums: [AlbumEntry] {
         albums.filter { album in
             if let playCount = musicManager.playCountsByLibraryId[album.libraryId] {
@@ -52,19 +48,25 @@ struct YearDetailView: View {
         }
     }
     
-    // Determine which albums to display based on current view and search state
     private var displayedAlbums: [AlbumEntry] {
-        // When searching, always show all matching albums
+        let rawList: [AlbumEntry]
         if !searchText.isEmpty {
-            return filteredAlbums
+            rawList = filteredAlbums
+        } else {
+            switch selectedView {
+            case .all:
+                rawList = albums
+            case .top:
+                rawList = topAlbums
+            }
         }
         
-        // Otherwise, respect the selected view
-        switch selectedView {
-        case .all:
-            return albums
-        case .top:
-            return topAlbums
+        return rawList.sorted { lhs, rhs in
+            let artistComparison = lhs.sortArtist.localizedCaseInsensitiveCompare(rhs.sortArtist)
+            if artistComparison == .orderedSame {
+                return lhs.album.localizedCaseInsensitiveCompare(rhs.album) == .orderedAscending
+            }
+            return artistComparison == .orderedAscending
         }
     }
     
@@ -82,20 +84,20 @@ struct YearDetailView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Segmented control (hidden when searching)
             if searchText.isEmpty {
-                Picker("", selection: $selectedView) {
+                Picker("Album Filter", selection: $selectedView) {
                     ForEach(AlbumView.allCases, id: \.self) { view in
                         Text(view.rawValue).tag(view)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .padding(.horizontal)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
+                .accessibilityLabel("Filter displayed albums")
             }
             
-            // Show empty state if Top Albums view has no albums
             if selectedView == .top && topAlbums.isEmpty && searchText.isEmpty {
                 topAlbumsEmptyState
             } else {
@@ -115,7 +117,6 @@ struct YearDetailView: View {
                 }
             }
             
-            // Footer with counts
             HStack {
                 if excludedCount > 0 {
                     Text("\(includedCount) favorites (\(excludedCount) hidden)")
@@ -166,6 +167,8 @@ struct YearDetailView: View {
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
+                .accessibilityLabel("Export options")
+                .accessibilityHint("Offers options to copy or download album details in JSON, plain text, or Markdown")
                 .disabled(includedCount == 0)
             }
         }
@@ -182,6 +185,7 @@ struct YearDetailView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .accessibilityLabel(message)
                     .accessibilityAddTraits(.isStaticText)
+                    .accessibilitySortPriority(1)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: toastMessage)
@@ -259,13 +263,10 @@ struct YearDetailView: View {
             do {
                 try data.write(to: url)
                 showToast("Saved \(includedCount) albums to \(title).json")
-            } catch {
-                // Silently fail - user will see file wasn't created
-            }
+            } catch { }
         }
     }
     
-    // Empty state for Top Albums view
     private var topAlbumsEmptyState: some View {
         VStack(spacing: 24) {
             Label("No Top Albums Yet", systemImage: "heart.slash.fill")
@@ -284,5 +285,6 @@ struct YearDetailView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
