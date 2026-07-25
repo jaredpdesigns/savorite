@@ -2,8 +2,6 @@
 //  AlbumCard.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/3/26.
-//
 
 import AppKit
 import SwiftUI
@@ -11,7 +9,7 @@ import SwiftUI
 struct AlbumCard: View {
     let album: AlbumEntry
     let isExcluded: Bool
-    let playCount: Int?  /* Optional play count passed from parent */
+    let playCount: Int?
     let onToggle: () -> Void
     
     private var playCountText: String {
@@ -22,7 +20,6 @@ struct AlbumCard: View {
     private var accessibilityLabelText: String {
         var label = "\(album.album) by \(album.artist)"
         
-        /* Include play count if available */
         if let count = playCount, count > 0 {
             label += ", played \(count) \(count == 1 ? "time" : "times")"
         }
@@ -69,7 +66,6 @@ struct AlbumCard: View {
                 }
                 .opacity(isExcluded ? 0.25 : 1.0)
                 
-                /* Excluded icon centered */
                 if isExcluded {
                     Image(systemName: "star.slash.fill")
                         .font(.title)
@@ -114,6 +110,8 @@ struct AlbumCard: View {
                     Image(systemName: "ellipsis.circle.fill")
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("Options for \(album.album)")
+                .accessibilityHint("Opens menu to exclude album or open in Apple Music")
                 .menuIndicator(.hidden)
                 .buttonStyle(.plain)
             }
@@ -122,44 +120,4 @@ struct AlbumCard: View {
         .accessibilityLabel(accessibilityLabelText)
         .accessibilityHint(accessibilityHintText)
     }
-}
-
-#Preview("Included") {
-    AlbumCard(
-        album: AlbumEntry(
-            album: "SABLE, fABLE",
-            artist: "Bon Iver",
-            link: "https://music.apple.com/us/album/1791161215",
-            genre: "Alternative",
-            itunesId: 1791161215,
-            artworkTemplate: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/44/95/21/449521a9-3e07-9a15-02be-d1412884e240/51719.jpg/{w}x{h}bb.jpg",
-            libraryId: "l.test",
-            isFavorite: true,
-            releaseDate: "2025-01-17"
-        ),
-        isExcluded: false,
-        playCount: 12
-    ) { }
-        .frame(width: 220)
-        .padding()
-}
-
-#Preview("Excluded") {
-    AlbumCard(
-        album: AlbumEntry(
-            album: "SABLE, fABLE",
-            artist: "Bon Iver",
-            link: "https://music.apple.com/us/album/1791161215",
-            genre: "Alternative",
-            itunesId: 1791161215,
-            artworkTemplate: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/44/95/21/449521a9-3e07-9a15-02be-d1412884e240/51719.jpg/{w}x{h}bb.jpg",
-            libraryId: "l.test",
-            isFavorite: true,
-            releaseDate: "2025-01-17"
-        ),
-        isExcluded: true,
-        playCount: nil
-    ) { }
-        .frame(width: 220)
-        .padding()
 }

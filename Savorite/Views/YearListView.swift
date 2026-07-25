@@ -2,8 +2,6 @@
 //  YearListView.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/3/26.
-//
 
 import SwiftUI
 
@@ -68,28 +66,33 @@ struct YearListView: View {
                     .accessibilityLabel("All Favorites, \(count) \(label)")
                 } else {
                     ForEach(filteredYears, id: \.self) { year in
-                        let albumCount = searchText.isEmpty
-                        ? (albumsByYear[year]?.count ?? 0)
-                        : matchingAlbumsCount(year)
-                        let countLabel = searchText.isEmpty ? "albums" : "matches"
+                        let matches = matchingAlbumsCount(year)
 
-                        HStack {
-                            Text(String(year))
-                                .font(.headline)
-                            Spacer()
-                            if searchText.isEmpty {
-                                Text("\(albumsByYear[year]?.count ?? 0) albums")
-                                    .foregroundStyle(.secondary)
-                                    .font(.body)
-                            } else {
-                                Text("\(matchingAlbumsCount(year)) matches")
-                                    .foregroundStyle(.secondary)
-                                    .font(.body)
+                        // Hide years that have 0 search matches when searching
+                        if searchText.isEmpty || matches > 0 {
+                            let albumCount = searchText.isEmpty
+                            ? (albumsByYear[year]?.count ?? 0)
+                            : matches
+                            let countLabel = searchText.isEmpty ? "albums" : "matches"
+
+                            HStack {
+                                Text(String(year))
+                                    .font(.headline)
+                                Spacer()
+                                if searchText.isEmpty {
+                                    Text("\(albumsByYear[year]?.count ?? 0) albums")
+                                        .foregroundStyle(.secondary)
+                                        .font(.body)
+                                } else {
+                                    Text("\(matches) matches")
+                                        .foregroundStyle(.secondary)
+                                        .font(.body)
+                                }
                             }
+                            .tag(year)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(year), \(albumCount) \(countLabel)")
                         }
-                        .tag(year)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("\(year), \(albumCount) \(countLabel)")
                     }
                 }
             }
@@ -103,7 +106,6 @@ struct YearListView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.bottom, 16)
-
             }
         }
     }

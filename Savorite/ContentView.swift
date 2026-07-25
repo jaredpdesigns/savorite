@@ -2,8 +2,6 @@
 //  ContentView.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/3/26.
-//
 
 import MusicKit
 import SwiftUI
@@ -48,25 +46,14 @@ struct ContentView: View {
     
     // Filter years based on search text
     private var filteredYears: [Int] {
-        let currentYear = Calendar.current.component(.year, from: Date())
-        
-        let yearsWithEnoughAlbums = musicManager.sortedYears.filter { year in
-            // Always show current year regardless of count
-            if year == currentYear {
-                return true
-            }
-            
-            // Only show other years with 10+ favorite albums
-            guard let albums = musicManager.albumsByYear[year] else { return false }
-            return albums.count >= 10
-        }
+        let years = musicManager.sortedYears
         
         if searchText.isEmpty {
-            return yearsWithEnoughAlbums
+            return years
         }
         
         let lowercasedSearch = searchText.lowercased()
-        return yearsWithEnoughAlbums.filter { year in
+        return years.filter { year in
             guard let albums = musicManager.albumsByYear[year] else { return false }
             return albums.contains { album in
                 album.album.lowercased().contains(lowercasedSearch) ||
@@ -110,6 +97,7 @@ struct ContentView: View {
                 singlePaneView
             }
         }
+        .focusedSceneValue(\.musicManager, musicManager)
         .task {
             musicManager.checkAuthorizationStatus()
             hasCheckedAuthorization = true
@@ -182,6 +170,9 @@ struct ContentView: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .help("Refresh favorites and play counts")
+                    .keyboardShortcut("r", modifiers: .command)
+                    .accessibilityLabel("Refresh library")
+                    .accessibilityHint("Fetches latest favorite albums from Apple Music")
                 }
             }
         } detail: {
@@ -192,6 +183,9 @@ struct ContentView: View {
                         await musicManager.refreshLibrary()
                     }
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("No internet connection")
+                .accessibilityHint("Connect to the internet to refresh your music library")
             } else if sidebarGrouping == .none {
                 YearDetailView(
                     title: "All Favorites",
@@ -232,6 +226,7 @@ struct ContentView: View {
         if !hasCheckedAuthorization {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Checking library authorization status")
         }
         // Check actual states
         else if musicManager.authorizationStatus == .notDetermined {
@@ -249,6 +244,8 @@ struct ContentView: View {
             NoConnectionView {
                 await musicManager.refreshLibrary()
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("No internet connection and no cached favorites found")
         } else if musicManager.albumsByYear.isEmpty {
             NoFavoritesView {
                 await musicManager.refreshLibrary()
@@ -264,8 +261,11 @@ struct ContentView: View {
             /* Load play count cache (don't refresh automatically) */
             _ = musicManager.loadPlayCountCache()
         } else {
-            /* No cache, fetch from cloud */
-            await musicManager.fetchFavoriteAlbums()
+            /*
+             No cache found. Do not automatically scan from the cloud.
+             Leaving `albumsByYear` empty causes `ContentView` to show `NoFavoritesView`,
+             requiring the user to manually click "Refresh Library".
+             */
         }
     }
 }
