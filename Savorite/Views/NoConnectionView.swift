@@ -2,8 +2,6 @@
 //  NoConnectionView.swift
 //  Savorite
 //
-//  Created by Jared Pendergraft on 2/20/26.
-//
 
 import SwiftUI
 
@@ -28,11 +26,9 @@ struct NoConnectionView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .accessibilityHint("Attempts to reconnect to Apple Music and refresh your favorites")
         }
         .padding()
+        .accessibilityElement(children: .contain)
     }
-}
-
-#Preview {
-    NoConnectionView {}
 }
