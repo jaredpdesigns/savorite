@@ -67,14 +67,12 @@ struct YearListView: View {
                 } else {
                     ForEach(filteredYears, id: \.self) { year in
                         let matches = matchingAlbumsCount(year)
-                        
                         // Hide years that have 0 search matches when searching
                         if searchText.isEmpty || matches > 0 {
                             let albumCount = searchText.isEmpty
                             ? (albumsByYear[year]?.count ?? 0)
                             : matches
                             let countLabel = searchText.isEmpty ? "albums" : "matches"
-                            
                             HStack {
                                 Text(String(year))
                                     .font(.headline)
