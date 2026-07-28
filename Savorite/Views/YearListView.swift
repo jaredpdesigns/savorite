@@ -15,7 +15,7 @@ struct YearListView: View {
     let matchingAlbumsCount: (Int) -> Int
     @Binding var sidebarGrouping: SidebarGrouping
     let allMatchingCount: Int
-
+    
     var body: some View {
         VStack(spacing: 0) {
             List(selection: $selectedYear) {
@@ -30,7 +30,7 @@ struct YearListView: View {
                         .foregroundStyle(.red)
                 }
                 .font(.largeTitle.bold())
-
+                
                 HStack {
                     Text("\(totalFavorites) Favorite Albums")
                         .font(.body)
@@ -51,13 +51,13 @@ struct YearListView: View {
                     .menuIndicator(.hidden)
                     .buttonStyle(.plain)
                 }
-
+                
                 Divider()
-
+                
                 if sidebarGrouping == .none {
                     let count = searchText.isEmpty ? totalFavorites : allMatchingCount
                     let label = searchText.isEmpty ? "albums" : "matches"
-
+                    
                     HStack {
                         Text("All Favorites")
                     }
@@ -67,14 +67,14 @@ struct YearListView: View {
                 } else {
                     ForEach(filteredYears, id: \.self) { year in
                         let matches = matchingAlbumsCount(year)
-
+                        
                         // Hide years that have 0 search matches when searching
                         if searchText.isEmpty || matches > 0 {
                             let albumCount = searchText.isEmpty
                             ? (albumsByYear[year]?.count ?? 0)
                             : matches
                             let countLabel = searchText.isEmpty ? "albums" : "matches"
-
+                            
                             HStack {
                                 Text(String(year))
                                     .font(.headline)
@@ -97,7 +97,7 @@ struct YearListView: View {
                 }
             }
             .listStyle(.sidebar)
-
+            
             if let lastUpdated = lastUpdated {
                 VStack(spacing: 16) {
                     Divider()
