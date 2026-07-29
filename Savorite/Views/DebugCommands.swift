@@ -21,6 +21,13 @@ struct DebugCommands: Commands {
             }
             .disabled(musicManager == nil)
             .keyboardShortcut("r", modifiers: [.command, .option])
+            
+            Divider()
+            
+            Button(musicManager?.isArtworkHidden == true ? "Show Artwork" : "Hide Artwork") {
+                musicManager?.debugToggleArtworkVisibility()
+            }
+            .disabled(musicManager == nil)
         }
     }
 }

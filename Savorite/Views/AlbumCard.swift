@@ -10,7 +10,23 @@ struct AlbumCard: View {
     let album: AlbumEntry
     let isExcluded: Bool
     let playCount: Int?
+    let isArtworkHidden: Bool
     let onToggle: () -> Void
+    
+    private var artworkURL: URL? {
+        guard !album.cover.isEmpty else { return nil }
+        return URL(string: album.cover)
+    }
+    
+    private var artworkBackgroundColor: Color {
+        Color(appleMusicHex: album.artworkBackgroundHex)
+        ?? Color(nsColor: .quaternaryLabelColor)
+    }
+    
+    private var artworkForegroundColor: Color {
+        Color(appleMusicHex: album.artworkPrimaryTextHex)
+        ?? Color(nsColor: .secondaryLabelColor)
+    }
     
     private var playCountText: String {
         guard let count = playCount else { return "" }
@@ -35,33 +51,50 @@ struct AlbumCard: View {
         isExcluded ? "Double-tap to include in export" : "Double-tap to exclude from export"
     }
     
+    private func artworkPlaceholder(isLoading: Bool) -> some View {
+        Rectangle()
+            .fill(artworkBackgroundColor)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if isLoading {
+                    ProgressView()
+                        .tint(artworkForegroundColor)
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.largeTitle)
+                        .foregroundStyle(artworkForegroundColor)
+                }
+            }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack() {
-                AsyncImage(url: URL(string: album.cover)) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(.quaternary)
-                            .aspectRatio(1, contentMode: .fit)
-                            .overlay {
-                                ProgressView()
+                Group {
+                    if let artworkURL {
+                        AsyncImage(url: artworkURL) { phase in
+                            switch phase {
+                            case .empty:
+                                artworkPlaceholder(isLoading: true)
+                            case .success(let image):
+                                ZStack {
+                                    Rectangle()
+                                        .fill(artworkBackgroundColor)
+                                    
+                                    image
+                                        .resizable()
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .opacity(isArtworkHidden ? 0 : 1)
+                                }
+                                .aspectRatio(1, contentMode: .fit)
+                            case .failure:
+                                artworkPlaceholder(isLoading: false)
+                            @unknown default:
+                                artworkPlaceholder(isLoading: false)
                             }
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(1, contentMode: .fit)
-                    case .failure:
-                        Rectangle()
-                            .fill(.quaternary)
-                            .aspectRatio(1, contentMode: .fit)
-                            .overlay {
-                                Image(systemName: "music.note")
-                                    .font(.largeTitle)
-                                    .foregroundStyle(.secondary)
-                            }
-                    @unknown default:
-                        EmptyView()
+                        }
+                    } else {
+                        artworkPlaceholder(isLoading: false)
                     }
                 }
                 .opacity(isExcluded ? 0.25 : 1.0)
@@ -119,5 +152,25 @@ struct AlbumCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabelText)
         .accessibilityHint(accessibilityHintText)
+    }
+}
+
+private extension Color {
+    init?(appleMusicHex hex: String?) {
+        guard
+            let hex,
+            hex.count == 6,
+            let value = UInt64(hex, radix: 16)
+        else {
+            return nil
+        }
+        
+        self.init(
+            .sRGB,
+            red: Double((value >> 16) & 0xff) / 255,
+            green: Double((value >> 8) & 0xff) / 255,
+            blue: Double(value & 0xff) / 255,
+            opacity: 1
+        )
     }
 }

@@ -52,7 +52,7 @@ struct LibraryAlbum: Codable {
 struct LibraryAlbumAttributes: Codable {
     let name: String?
     let artistName: String?
-    let artwork: LibraryArtwork?
+    let artwork: ArtworkAttributes?
     let genreNames: [String]?
     let releaseDate: String?
     let inFavorites: Bool?
@@ -61,10 +61,12 @@ struct LibraryAlbumAttributes: Codable {
     let contentRating: String?
 }
 
-struct LibraryArtwork: Codable {
+struct ArtworkAttributes: Codable {
     let url: String?
     let width: Int?
     let height: Int?
+    let bgColor: String?
+    let textColor1: String?
 }
 
 struct LibraryAlbumRelationships: Codable {
@@ -84,6 +86,7 @@ struct CatalogAlbum: Codable {
 struct CatalogAlbumAttributes: Codable {
     let url: String?
     let releaseDate: String?
+    let artwork: ArtworkAttributes?
 }
 
 struct TracksRelationship: Codable {
@@ -146,6 +149,9 @@ class MusicManager {
     var totalAlbumsInLibrary = 0
     var lastUpdated: Date?
     var isConnected = true
+    
+    /* Session-only debug presentation state */
+    var isArtworkHidden = false
     
     /* Loading progress tracking */
     var loadingCurrentCount = 0
@@ -377,7 +383,11 @@ class MusicManager {
                     continue
                 }
                 
-                let artworkTemplate = attrs.artwork?.url ?? ""
+                let libraryArtwork = attrs.artwork
+                let catalogArtwork = album.relationships?.catalog?.data?.first?.attributes?.artwork
+                let artworkTemplate = libraryArtwork?.url ?? catalogArtwork?.url ?? ""
+                let artworkBackgroundHex = libraryArtwork?.bgColor ?? catalogArtwork?.bgColor
+                let artworkPrimaryTextHex = libraryArtwork?.textColor1 ?? catalogArtwork?.textColor1
                 var catalogAlbumId = 0
                 var albumLink = ""
                 
@@ -450,6 +460,8 @@ class MusicManager {
                     genre: attrs.genreNames?.first ?? "",
                     itunesId: catalogAlbumId,
                     artworkTemplate: artworkTemplate,
+                    artworkBackgroundHex: artworkBackgroundHex,
+                    artworkPrimaryTextHex: artworkPrimaryTextHex,
                     libraryId: album.id,
                     isFavorite: isFavorite,
                     releaseDate: releaseDateString,
@@ -655,6 +667,11 @@ class MusicManager {
         totalAlbumsInLibrary = 0
         lastUpdated = nil
         playCountLastUpdated = nil
+    }
+    
+    /// Toggles album artwork visibility without treating the artwork as unavailable.
+    func debugToggleArtworkVisibility() {
+        isArtworkHidden.toggle()
     }
     
     /// Resets authorization status, purges system TCC permissions for Media Library,

@@ -107,7 +107,8 @@ struct YearDetailView: View {
                             AlbumCard(
                                 album: album,
                                 isExcluded: musicManager.isExcluded(album),
-                                playCount: musicManager.playCountsByLibraryId[album.libraryId]
+                                playCount: musicManager.playCountsByLibraryId[album.libraryId],
+                                isArtworkHidden: musicManager.isArtworkHidden
                             ) {
                                 musicManager.toggleExclusion(for: album)
                             }
