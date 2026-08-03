@@ -7,7 +7,7 @@ import SwiftUI
 
 struct AuthorizationPromptView: View {
     let onAuthorize: () async -> Void
-
+    
     var body: some View {
         VStack(spacing: 24) {
             Label {
@@ -21,12 +21,12 @@ struct AuthorizationPromptView: View {
                     .foregroundStyle(.red)
             }
             .font(.largeTitle.bold())
-
-            Text("Access your favorite albums from Apple Music and export them as JSON, plain text, or Markdown")
+            
+            Text("Access your favorite albums from Apple Music and export them as JSON, plain text, or Markdown.\nTo begin, you must allow Savorite access to your Apple Music library.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-
-            Button("Grant Music Access") {
+            
+            Button("Continue") {
                 Task {
                     await onAuthorize()
                 }

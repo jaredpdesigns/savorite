@@ -13,7 +13,7 @@ struct NoFavoritesView: View {
             Label("No Favorite Albums Found", systemImage: "star.slash.fill")
                 .font(.largeTitle.bold())
             
-            Text("Favorite albums in Apple Music to see them here")
+            Text("Favorite albums in Apple Music to see them here.\nRefresh to see new activity.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             
