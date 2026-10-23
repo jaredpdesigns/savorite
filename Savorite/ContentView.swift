@@ -12,47 +12,43 @@ enum SidebarGrouping: String {
 }
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var musicManager = MusicManager()
     @State private var selectedYear: Int?
     @State private var searchText: String = ""
     @State private var hasCheckedAuthorization: Bool = false
-    @State private var shouldRefreshAfterAuthorization: Bool = false
     @AppStorage("sidebarGrouping") private var sidebarGrouping: SidebarGrouping = .byYear
     @State private var showNoConnection = false
-
+    private let automaticRefreshInterval: TimeInterval = 30 * 60
+    
     // Determines if we should show the split view (sidebar + detail)
     private var shouldShowSplitView: Bool {
         // Must have checked authorization first
         guard hasCheckedAuthorization else {
             return false
         }
-
+        
         // Must be authorized
         guard musicManager.authorizationStatus == .authorized else {
             return false
         }
-
-        // Must not be loading
-        guard !musicManager.isLoading else {
-            return false
-        }
-
+        
         // Must have favorites
         guard !musicManager.albumsByYear.isEmpty else {
             return false
         }
-
+        
         return true
     }
-
+    
     // Filter years based on search text
     private var filteredYears: [Int] {
         let years = musicManager.sortedYears
-
+        
         if searchText.isEmpty {
             return years
         }
-
+        
         let lowercasedSearch = searchText.lowercased()
         return years.filter { year in
             guard let albums = musicManager.albumsByYear[year] else { return false }
@@ -62,7 +58,7 @@ struct ContentView: View {
             }
         }
     }
-
+    
     // Count matching albums for a year
     private func matchingAlbumsCount(forYear year: Int) -> Int {
         guard !searchText.isEmpty, let albums = musicManager.albumsByYear[year] else {
@@ -74,13 +70,13 @@ struct ContentView: View {
             album.artist.lowercased().contains(lowercasedSearch)
         }.count
     }
-
+    
     private var allAlbums: [AlbumEntry] {
         musicManager.albumsByYear.values
             .flatMap { $0 }
             .sorted { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
     }
-
+    
     private var allMatchingCount: Int {
         if searchText.isEmpty { return musicManager.totalFavorites }
         let lowercasedSearch = searchText.lowercased()
@@ -89,7 +85,7 @@ struct ContentView: View {
             album.artist.lowercased().contains(lowercasedSearch)
         }.count
     }
-
+    
     var body: some View {
         Group {
             if shouldShowSplitView {
@@ -102,8 +98,18 @@ struct ContentView: View {
         .task {
             musicManager.checkAuthorizationStatus()
             hasCheckedAuthorization = true
-
+            
             if musicManager.authorizationStatus == .authorized {
+                await loadMusicData()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            
+            musicManager.checkAuthorizationStatus()
+            guard musicManager.authorizationStatus == .authorized else { return }
+            
+            Task {
                 await loadMusicData()
             }
         }
@@ -111,12 +117,14 @@ struct ContentView: View {
             if newValue == .authorized {
                 Task {
                     await loadMusicData()
-
-                    if shouldRefreshAfterAuthorization {
-                        shouldRefreshAfterAuthorization = false
-                        await musicManager.refreshLibrary()
-                    }
                 }
+            }
+        }
+        .onChange(of: musicManager.isConnected) { _, isConnected in
+            guard isConnected, musicManager.authorizationStatus == .authorized else { return }
+            
+            Task {
+                await loadMusicData()
             }
         }
         .onChange(of: searchText) { oldValue, newValue in
@@ -142,10 +150,25 @@ struct ContentView: View {
                 selectedYear = filteredYears.first
             }
         }
+        .alert(
+            "Savorite Error",
+            isPresented: Binding(
+                get: { !musicManager.albumsByYear.isEmpty && musicManager.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        musicManager.errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(musicManager.errorMessage ?? "")
+        }
     }
-
+    
     // MARK: - Split View (authorized with favorites)
-
+    
     private var splitView: some View {
         NavigationSplitView {
             YearListView(
@@ -173,8 +196,15 @@ struct ContentView: View {
                             showNoConnection = true
                         }
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        if musicManager.isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 16, height: 16)
+                        } else {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
                     }
+                    .disabled(musicManager.isLoading)
                     .help("Refresh favorites and play counts")
                     .keyboardShortcut("r", modifiers: .command)
                     .accessibilityLabel("Refresh library")
@@ -218,14 +248,14 @@ struct ContentView: View {
             }
         }
     }
-
+    
     // MARK: - Single Pane View (authorization, loading, empty states)
-
+    
     private var singlePaneView: some View {
         singlePaneContent
             .frame(minWidth: 500, minHeight: 400)
     }
-
+    
     @ViewBuilder
     private var singlePaneContent: some View {
         // Show nothing until we've checked authorization
@@ -237,7 +267,6 @@ struct ContentView: View {
         // Check actual states
         else if musicManager.authorizationStatus == .notDetermined {
             AuthorizationPromptView {
-                shouldRefreshAfterAuthorization = true
                 await musicManager.requestAuthorization()
             }
         } else if musicManager.authorizationStatus == .denied || musicManager.authorizationStatus == .restricted {
@@ -247,6 +276,23 @@ struct ContentView: View {
                 currentCount: musicManager.loadingCurrentCount,
                 totalCount: musicManager.loadingTotalCount
             )
+        } else if let errorMessage = musicManager.errorMessage {
+            VStack(spacing: 16) {
+                Label("Couldn't Load Your Library", systemImage: "exclamationmark.triangle")
+                    .font(.title2.bold())
+                
+                Text(errorMessage)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Button("Try Again") {
+                    Task {
+                        await musicManager.refreshLibrary()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
         } else if musicManager.albumsByYear.isEmpty && !musicManager.isConnected {
             NoConnectionView {
                 await musicManager.refreshLibrary()
@@ -259,21 +305,23 @@ struct ContentView: View {
             }
         }
     }
-
+    
     /* MARK: - Helper Methods */
-
+    
     private func loadMusicData() async {
-        /* Try loading from cache first */
-        if musicManager.loadFromCache() {
-            /* Load play count cache (don't refresh automatically) */
+        guard !musicManager.isLoading else { return }
+        
+        let loadedCache = musicManager.loadFromCache()
+        if loadedCache {
             _ = musicManager.loadPlayCountCache()
-        } else {
-            /*
-             No cache found. Do not automatically scan from the cloud.
-             Leaving `albumsByYear` empty causes `ContentView` to show `NoFavoritesView`,
-             requiring the user to manually click "Refresh Library".
-             */
         }
+        
+        let cacheIsStale = musicManager.lastUpdated.map {
+            Date().timeIntervalSince($0) >= automaticRefreshInterval
+        } ?? true
+        
+        guard musicManager.isConnected, !loadedCache || cacheIsStale else { return }
+        await musicManager.refreshLibrary()
     }
 }
 

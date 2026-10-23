@@ -328,8 +328,6 @@ class MusicManager {
         // Delay handshake to give Apple Music's cloud CDN time to process recent favoriting actions
         try? await Task.sleep(for: .seconds(5))
         
-        albumsByYear = [:]
-        
         var allAlbums: [LibraryAlbum] = []
         var nextURL: String? = "https://api.music.apple.com/v1/me/library/albums?limit=100&include=catalog,tracks.catalog&extend=inFavorites"
         
