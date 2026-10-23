@@ -32,11 +32,11 @@ struct SavoriteApp: App {
         WindowGroup {
             ContentView()
         }
-        .commands {
 #if DEBUG
+        .commands {
             DebugCommands()
-#endif
         }
+#endif
     }
 }
 
