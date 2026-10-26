@@ -1,10 +1,7 @@
 {
   "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
-    "linear-gradient" : [
-      "display-p3:1.00000,0.31690,0.46425,1.00000",
-      "display-p3:0.80794,0.09167,0.16937,1.00000"
-    ],
+    "automatic-gradient" : "extended-gray:1.00000,1.00000",
     "orientation" : {
       "start" : {
         "x" : 0.5,
@@ -20,9 +17,19 @@
     {
       "layers" : [
         {
-          "fill" : {
-            "solid" : "extended-gray:1.00000,1.00000"
-          },
+          "fill-specializations" : [
+            {
+              "value" : "system-dark"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "system-light"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "system-light"
+            }
+          ],
           "glass" : true,
           "hidden" : false,
           "image-name" : "App Icon Template.svg",

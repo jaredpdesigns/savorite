@@ -23,11 +23,12 @@ struct YearListView: View {
                     Text("Savorite")
                 } icon: {
                     Image("SavoriteIconFlat")
+                        .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
                         .frame(height: 34)
                         .accessibilityHidden(true)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.primary)
                 }
                 .font(.largeTitle.bold())
                 

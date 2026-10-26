@@ -8,7 +8,7 @@ import SwiftUI
 struct LoadingView: View {
     let currentCount: Int
     let totalCount: Int
-
+    
     var body: some View {
         VStack(spacing: 24) {
             Label {
@@ -19,23 +19,22 @@ struct LoadingView: View {
                     .scaledToFit()
                     .frame(height: 34)
                     .accessibilityHidden(true)
-                    .foregroundStyle(.red)
             }
             .font(.largeTitle.bold())
-
+            
             if totalCount > 0 {
                 Text("Fetching albums")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
-
+                
                 VStack(spacing: 4) {
                     ProgressView(value: Double(currentCount), total: Double(totalCount))
                         .progressViewStyle(.linear)
                         .frame(maxWidth: 200)
                         .accessibilityLabel("Loading progress")
                         .accessibilityValue("\(currentCount) of \(totalCount) albums")
-
+                    
                     HStack() {
                         Text("\(currentCount)")
                             .font(.caption)

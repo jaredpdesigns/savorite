@@ -18,7 +18,6 @@ struct AuthorizationPromptView: View {
                     .scaledToFit()
                     .frame(height: 34)
                     .accessibilityHidden(true)
-                    .foregroundStyle(.red)
             }
             .font(.largeTitle.bold())
             
