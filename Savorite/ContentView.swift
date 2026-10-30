@@ -231,7 +231,7 @@ struct ContentView: View {
                 )
             } else if let year = selectedYear, let albums = musicManager.albumsByYear[year] {
                 YearDetailView(
-                    title: String(year),
+                    title: year == 0 ? "Unknown Year" : String(year),
                     albums: albums,
                     musicManager: musicManager,
                     searchText: searchText

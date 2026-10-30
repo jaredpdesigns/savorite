@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct YearListView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var selectedYear: Int?
     let filteredYears: [Int]
     let albumsByYear: [Int: [AlbumEntry]]
@@ -58,9 +59,11 @@ struct YearListView: View {
                 if sidebarGrouping == .none {
                     let count = searchText.isEmpty ? totalFavorites : allMatchingCount
                     let label = searchText.isEmpty ? "albums" : "matches"
+                    let isSelectedInDarkMode = selectedYear == 0 && colorScheme == .dark
                     
                     HStack {
                         Text("All Favorites")
+                            .foregroundStyle(isSelectedInDarkMode ? Color.black : Color.primary)
                     }
                     .tag(0)
                     .accessibilityElement(children: .ignore)
@@ -74,23 +77,26 @@ struct YearListView: View {
                             ? (albumsByYear[year]?.count ?? 0)
                             : matches
                             let countLabel = searchText.isEmpty ? "albums" : "matches"
+                            let yearLabel = year == 0 ? "Unknown Year" : String(year)
+                            let isSelectedInDarkMode = selectedYear == year && colorScheme == .dark
                             HStack {
-                                Text(String(year))
+                                Text(yearLabel)
                                     .font(.headline)
+                                    .foregroundStyle(isSelectedInDarkMode ? Color.black : Color.primary)
                                 Spacer()
                                 if searchText.isEmpty {
                                     Text("\(albumsByYear[year]?.count ?? 0) albums")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(isSelectedInDarkMode ? Color.black.opacity(0.8) : Color.secondary)
                                         .font(.body)
                                 } else {
                                     Text("\(matches) matches")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(isSelectedInDarkMode ? Color.black.opacity(0.8) : Color.secondary)
                                         .font(.body)
                                 }
                             }
                             .tag(year)
                             .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("\(year), \(albumCount) \(countLabel)")
+                            .accessibilityLabel("\(yearLabel), \(albumCount) \(countLabel)")
                         }
                     }
                 }

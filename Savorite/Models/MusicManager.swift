@@ -177,9 +177,13 @@ class MusicManager {
         monitor.start(queue: DispatchQueue(label: "NetworkMonitor"))
     }
     
-    // Filter out invalid year keys (e.g. 0)
+    // Keep albums with unknown release years visible, sorted after dated albums.
     var sortedYears: [Int] {
-        albumsByYear.keys.filter { $0 > 0 }.sorted(by: >)
+        albumsByYear.keys.filter { $0 >= 0 }.sorted { lhs, rhs in
+            if lhs == 0 { return false }
+            if rhs == 0 { return true }
+            return lhs > rhs
+        }
     }
     
     var totalFavorites: Int {
@@ -479,6 +483,14 @@ class MusicManager {
                     }
                     return artistComparison == .orderedAscending
                 }
+            }
+            
+            let favoriteStatusMissingCount = allAlbums.filter { $0.attributes.inFavorites == nil }.count
+            let favoriteStatusTrueCount = allAlbums.filter { $0.attributes.inFavorites == true }.count
+            
+            // Don't present a missing API field as a genuine empty favorites list.
+            if !allAlbums.isEmpty, favoriteStatusTrueCount == 0, favoriteStatusMissingCount == allAlbums.count {
+                errorMessage = "Apple Music returned \(allAlbums.count) library albums but didn't include favorite status. Try refreshing again; if it continues, share this message with the developer."
             }
             
             albumsByYear = grouped
